@@ -1,0 +1,19 @@
+# Gordon Core Config
+[core]
+[core.logging]
+level = "debug"
+handlers = ["syslog"]
+
+# Plugin Config
+[gcp]
+project = "my-gcp-project"
+
+[gcp.compute]
+keyfile = "/path/to/keyfiles/compute.json"
+
+[gcp.dns]
+keyfile = "/path/to/keyfiles/dns.json"
+
+[gcp.pubsub]
+project = "my-pubsub-project"
+keyfile = "/path/to/keyfiles/pubsub.json"
