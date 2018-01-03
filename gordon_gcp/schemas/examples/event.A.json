@@ -1,0 +1,12 @@
+{
+    "resourceRecords": {
+        "name": "lynntest-a-1234.foo.spotify.net.",
+        "rrdatas": [
+            "10.1.2.3"
+        ],
+        "ttl": 300,
+        "type": "A"
+    },
+    "timestamp": "2017-12-04T20:13:51.414016721Z",
+    "action": "additions"
+}

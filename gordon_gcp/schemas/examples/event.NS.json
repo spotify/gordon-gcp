@@ -1,0 +1,15 @@
+{
+    "action": "additions",
+    "timestamp": "2017-12-04T20:13:51.414016721Z",
+    "resourceRecords": {
+        "name": "gordontest.spotify.net.",
+        "rrdatas": [
+            "ns-cloud-c1.googledomains.com.",
+            "ns-cloud-c2.googledomains.com.",
+            "ns-cloud-c3.googledomains.com.",
+            "ns-cloud-c4.googledomains.com."
+        ],
+        "ttl": 21600,
+        "type": "SOA"
+    }
+}

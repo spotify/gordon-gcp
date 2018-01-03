@@ -100,6 +100,10 @@ setup(
             'gcp.pubsub = gordon_gcp.pubsub:PubSubClient',
         ],
     },
+    data_files=[
+        'schemas/audit-log.schema.json',
+        'schemas/event.schema.json'
+    ],
     classifiers=CLASSIFIERS,
     keywords=KEYWORDS,
     zip_safe=False,

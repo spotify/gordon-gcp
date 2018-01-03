@@ -1,0 +1,54 @@
+{
+  "insertId": "123456789101112",
+  "logName": "projects/some-project/logs/cloudaudit.googleapis.com%2Factivity",
+  "operation": {
+    "first": true,
+    "id": "operation-1234-5678-9101-1121",
+    "producer": "compute.googleapis.com"
+  },
+  "protoPayload": {
+    "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+    "authenticationInfo": {
+      "principalEmail": "not-real@cloudservices.gserviceaccount.com"
+    },
+    "authorizationInfo": [
+      {
+        "granted": true,
+        "permission": "compute.instances.create"
+      }
+    ],
+    "methodName": "v1.compute.instances.insert",
+    "request": {
+      "@type": "compute.googleapis.com/compute.instances.insert"
+    },
+    "requestMetadata": {
+      "callerSuppliedUserAgent": "Managed Infrastructure Mixer Client"
+    },
+    "resourceName": "projects/123456789101/zones/us-central1-c/instances/an-instance-name-b34c",
+    "response": {
+      "@type": "compute.googleapis.com/operation",
+      "id": "234567891011121314",
+      "insertTime": "2017-12-04T12:13:44.785-08:00",
+      "name": "operation-1234-5678-9101-1121",
+      "operationType": "insert",
+      "progress": "0",
+      "selfLink": "https://www.googleapis.com/compute/v1/projects/some-project/zones/us-central1-c/operations/operation-1234-5678-9101-1121",
+      "status": "PENDING",
+      "targetId": "123456789101213141",
+      "targetLink": "https://www.googleapis.com/compute/v1/projects/some-project/zones/us-central1-c/instances/an-instance-name-b34c",
+      "zone": "https://www.googleapis.com/compute/v1/projects/some-project/zones/us-central1-c"
+    },
+    "serviceName": "compute.googleapis.com"
+  },
+  "receiveTimestamp": "2017-12-04T20:13:45.494149958Z",
+  "resource": {
+    "labels": {
+      "instance_id": "123456789101213141",
+      "project_id": "some-project",
+      "zone": "us-central1-c"
+    },
+    "type": "gce_instance"
+  },
+  "severity": "NOTICE",
+  "timestamp": "2017-12-04T20:13:44.181Z"
+}
