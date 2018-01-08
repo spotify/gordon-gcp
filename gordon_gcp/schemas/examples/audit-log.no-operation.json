@@ -1,0 +1,25 @@
+{
+    "insertId": "123456789101112",
+    "logName": "projects/a-project/logs/cloudaudit.googleapis.com%2Factivity",
+    "protoPayload": {
+        "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+        "authenticationInfo": {},
+        "methodName": "v1.compute.instances.insert",
+        "requestMetadata": {
+            "callerSuppliedUserAgent": "Managed Infrastructure Mixer Client"
+        },
+        "resourceName": "projects/123456789101/zones/us-central1-c/instances/an-instance-name-a123b",
+        "serviceName": "compute.googleapis.com"
+    },
+    "receiveTimestamp": "2017-12-04T20:13:51.414016721Z",
+    "resource": {
+        "labels": {
+            "instance_id": "123456789101213141",
+            "project_id": "a-project",
+            "zone": "us-central1-c"
+        },
+        "type": "gce_instance"
+    },
+    "severity": "NOTICE",
+    "timestamp": "2017-12-04T20:13:50.717Z"
+}
