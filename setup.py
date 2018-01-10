@@ -101,8 +101,8 @@ setup(
         ],
     },
     data_files=[
-        'schemas/audit-log.schema.json',
-        'schemas/event.schema.json'
+        'schema/schemas/audit-log.schema.json',
+        'schema/schemas/event.schema.json'
     ],
     classifiers=CLASSIFIERS,
     keywords=KEYWORDS,
