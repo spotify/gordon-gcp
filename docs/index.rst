@@ -25,6 +25,7 @@ User Guide
 
    providers
    schema
+   validate
 
 
 Project Information
