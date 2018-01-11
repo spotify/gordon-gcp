@@ -44,12 +44,16 @@ To use:
         'event': {'title': 'Generic Event Message', 'type': 'object', 'required': ...},
         'audit-log': {'title': 'Google Audit Log Message', 'type': 'object', 'required': ...}
     }
+    >>> example_message = {'foo': 'bar'}
+    >>> validator.validate(example_message, 'event')
 """
 
 import json
 import logging
 import os
 import pathlib
+
+import jsonschema
 
 from gordon_gcp import exceptions
 
@@ -94,3 +98,35 @@ class MessageValidator:
             raise exceptions.GCPGordonError(msg)
 
         return schemas
+
+    def validate(self, message, schema_name):
+        """Validate a message given a schema.
+
+        Args:
+            message (dict): Loaded JSON of pulled message from Google
+                PubSub.
+            schema_name (str): Name of schema to validate ``message``
+                against. ``schema_name`` will be used to look up
+                schema from :py:attr:`.MessageValidator.schemas` dict
+        Raises:
+            InvalidMessageError: if message is invalid against the
+                given schema.
+            InvalidMessageError: if given schema name can not be found.
+        """
+        err = None
+        try:
+            jsonschema.validate(message, self.schemas[schema_name])
+
+        except KeyError:
+            msg = (f'Schema "{schema_name}" was not found (available: '
+                   f'{", ".join(self.schemas.keys())})')
+            err = {'msg': msg}
+
+        except jsonschema.ValidationError as e:
+            msg = (f'Given message was not valid against the schema '
+                   f'"{schema_name}"')
+            err = {'msg': msg, 'exc_info': e}
+
+        if err:
+            logging.error(**err)
+            raise exceptions.InvalidMessageError(err['msg'])

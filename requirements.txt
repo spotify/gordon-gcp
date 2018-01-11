@@ -1,1 +1,2 @@
 gordon-dns==0.0.1.dev0
+jsonschema==2.6.0

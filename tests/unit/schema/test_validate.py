@@ -118,3 +118,52 @@ def test_load_schema_raises(fixture, mocker, monkeypatch, tmpdir, caplog):
     e.match(exp_error_msg)
     assert 1 == len(caplog.records)
     assert 'ERROR' == caplog.records[0].levelname
+
+
+@pytest.fixture
+def message():
+    return {
+        'foo': 'a foo string',
+        'bar': 'a bar string'
+    }
+
+
+@pytest.fixture
+def loaded_schemas(json_schema_dict, monkeypatch):
+    loaded_schema = {
+        'fake-schema': json_schema_dict
+    }
+    monkeypatch.setattr(
+        validate.MessageValidator, '_load_schemas', lambda x: loaded_schema)
+
+
+def test_validate(loaded_schemas, message, caplog):
+    validator = validate.MessageValidator()
+
+    validator.validate(message, 'fake-schema')
+
+    assert 0 == len(caplog.records)
+
+
+def test_validate_raises_not_found(loaded_schemas, message, caplog):
+    validator = validate.MessageValidator()
+
+    with pytest.raises(exceptions.InvalidMessageError) as e:
+        validator.validate(message, 'undefined-schema')
+
+    # using `e.match` with logs that have parens require escaping
+    e.match('Schema "undefined-schema" was not found '
+            '\(available: fake-schema\)')
+    assert 1 == len(caplog.records)
+
+
+def test_validate_raises_invalid(loaded_schemas, caplog):
+    validator = validate.MessageValidator()
+
+    malformed_msg = {'foo': 'no bar property'}
+
+    with pytest.raises(exceptions.InvalidMessageError) as e:
+        validator.validate(malformed_msg, 'fake-schema')
+
+    e.match('Given message was not valid against the schema "fake-schema"')
+    assert 1 == len(caplog.records)
