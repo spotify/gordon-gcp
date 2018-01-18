@@ -1,7 +1,89 @@
-Schema Definition for Event Publishing
-======================================
+Schema Definitions for Event Publishing
+=======================================
 
-.. TODO:: Add prose documentation once schema is actually defined.
+This plugin defines two types of schemas for consuming events by the :doc:`Google PubSub plugin <pubsub>`: :ref:`audit` and a :ref:`general`.
 
-.. literalinclude:: ../gordon_gcp/schemas/event.schema.json
+
+
+.. _audit:
+
+Google Audit Log Message
+------------------------
+
+The :ref:`audit` schema is based off of Google's `Audit Log`_ datatype for `Cloud Audit Logging`_. Documentation on setting up the exporting of Google Cloud audit logs to Google PubSub (a.k.a. a "sink") can be found `here`_. You may need to refine the export to include the following `filters`_::
+
+
+    resource.type=gce_instance
+    protoPayload."@type"="type.googleapis.com/google.cloud.audit.AuditLog"
+
+
+Schema Definition
+~~~~~~~~~~~~~~~~~
+
+.. literalinclude:: ../gordon_gcp/schema/schemas/audit-log.schema.json
     :language: json
+
+Examples
+~~~~~~~~
+
+Audit Log Message with an ``operation.first`` key:
+**************************************************
+
+.. literalinclude:: ../gordon_gcp/schema/examples/audit-log.first-operation.json
+    :language: json
+
+Audit Log Message with an ``operation.last`` key:
+*************************************************
+
+.. literalinclude:: ../gordon_gcp/schema/examples/audit-log.last-operation.json
+    :language: json
+
+Audit Log Message with no ``operation`` object:
+***********************************************
+
+.. literalinclude:: ../gordon_gcp/schema/examples/audit-log.no-operation.json
+    :language: json
+
+
+.. _general:
+
+General Event Message
+---------------------
+
+The :ref:`general` schema is meant for any event that may not come from Google's audit log sink. For instance, one may need to add/update/delete a manual record (i.e. marketing-friendly ``CNAME`` s). Or there may be a reconciliation process between the current state of the world and what is reflected in DNS.
+
+Schema Definition
+~~~~~~~~~~~~~~~~~
+
+.. literalinclude:: ../gordon_gcp/schema/schemas/event.schema.json
+    :language: json
+
+
+Examples
+~~~~~~~~
+
+Event for an ``A`` record:
+**************************
+
+.. literalinclude:: ../gordon_gcp/schema/examples/event.A.json
+    :language: json
+
+
+Event for an ``CNAME`` record:
+******************************
+
+.. literalinclude:: ../gordon_gcp/schema/examples/event.CNAME.json
+    :language: json
+
+
+Event for an ``NS`` record:
+***************************
+
+.. literalinclude:: ../gordon_gcp/schema/examples/event.NS.json
+    :language: json
+
+
+.. _`Audit Log`: https://cloud.google.com/logging/docs/reference/audit/auditlog/rest/Shared.Types/AuditLog
+.. _`Cloud Audit Logging`: https://cloud.google.com/logging/docs/audit/
+.. _`here`: https://cloud.google.com/logging/docs/audit/#exporting_audit_logs
+.. _`filters`: https://cloud.google.com/logging/docs/view/advanced-filters
