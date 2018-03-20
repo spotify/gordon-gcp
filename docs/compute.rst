@@ -5,4 +5,4 @@ Compute API Reference
 
 .. automodule:: gordon_gcp.compute
 
-.. autoclass:: gordon_gcp.compute.ComputeEngineClient
+.. autoclass:: gordon_gcp.compute.GCEEnricher

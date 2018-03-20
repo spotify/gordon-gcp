@@ -58,6 +58,8 @@ extensions = [
     'sphinx.ext.napoleon',
     # link to other projects' documentation
     'sphinx.ext.intersphinx',
+    # zope interface doc help
+    'sphinxcontrib.zopeext.autointerface',
 ]
 
 

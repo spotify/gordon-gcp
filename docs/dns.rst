@@ -5,4 +5,4 @@ DNS API Reference
 
 .. automodule:: gordon_gcp.dns
 
-.. autoclass:: gordon_gcp.dns.CloudDNSClient
+.. autoclass:: gordon_gcp.dns.GDNSPublisher

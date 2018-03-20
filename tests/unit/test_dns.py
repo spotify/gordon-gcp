@@ -13,18 +13,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from gordon.interfaces.dns_client import IDNSProviderClient
+
+import asyncio
 
 import pytest  # NOQA
+from gordon import interfaces
 
-from gordon_gcp import CloudDNSClient
+from gordon_gcp import dns
 
 
 def test_implements_interface():
-    """CloudDNSClient provides IDNSProviderClient"""
+    """GDNSPublisher implements IPublisherClient"""
     config = {'foo': 'bar'}
-    client = CloudDNSClient(config)
-    assert issubclass(CloudDNSClient, IDNSProviderClient)
-    assert isinstance(client, IDNSProviderClient)
-    assert config == client.config
-    assert 'Google Cloud DNS' == client.name
+    success, error = asyncio.Queue(), asyncio.Queue()
+    client = dns.GDNSPublisher(config, success, error)
+
+    assert interfaces.IPublisherClient.providedBy(client)
+    assert interfaces.IPublisherClient.implementedBy(dns.GDNSPublisher)
+    assert config is client.config
+    assert success is client.success_channel
+    assert error is client.error_channel
+    assert 'publish' == client.phase

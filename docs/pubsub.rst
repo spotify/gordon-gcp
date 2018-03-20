@@ -5,4 +5,4 @@ PubSub API Reference
 
 .. automodule:: gordon_gcp.pubsub
 
-.. autoclass:: gordon_gcp.pubsub.PubSubClient
+.. autoclass:: gordon_gcp.pubsub.GPSEventConsumer

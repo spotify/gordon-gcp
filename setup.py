@@ -95,9 +95,9 @@ setup(
     packages=PACKAGES,
     entry_points={
         'gordon.plugins': [
-            'gcp.compute = gordon_gcp.compute:ComputeEngineClient',
-            'gcp.dns = gordon_gcp.dns:CloudDNSClient',
-            'gcp.pubsub = gordon_gcp.pubsub:PubSubClient',
+            'gcp.compute = gordon_gcp.compute:GCEEnricher',
+            'gcp.dns = gordon_gcp.dns:GDNSPublisher',
+            'gcp.pubsub = gordon_gcp.pubsub:GPSEventConsumer',
         ],
     },
     data_files=[

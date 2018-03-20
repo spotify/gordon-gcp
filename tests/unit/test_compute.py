@@ -13,18 +13,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from gordon.interfaces.reference_client import IResourceReferenceClient
+
+import asyncio
 
 import pytest  # NOQA
+from gordon import interfaces
 
-from gordon_gcp import ComputeEngineClient
+from gordon_gcp import compute
 
 
 def test_implements_interface():
-    """ComputeEngineClient provides IResourceReferenceClient"""
+    """GCEEnricher implements IEnricherClient"""
     config = {'foo': 'bar'}
-    client = ComputeEngineClient(config)
-    assert issubclass(ComputeEngineClient, IResourceReferenceClient)
-    assert isinstance(client, IResourceReferenceClient)
-    assert config == client.config
-    assert 'Google Compute Engine' == client.name
+    success, error = asyncio.Queue(), asyncio.Queue()
+    client = compute.GCEEnricher(config, success, error)
+
+    assert interfaces.IEnricherClient.providedBy(client)
+    assert interfaces.IEnricherClient.implementedBy(compute.GCEEnricher)
+    assert config is client.config
+    assert success is client.success_channel
+    assert error is client.error_channel
+    assert 'enrich' == client.phase

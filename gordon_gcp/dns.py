@@ -14,24 +14,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Module to implement the ``IDNSProviderClient`` interface defined in
-`gordon-dns <https://github.com/spotify/gordon>`_ .
+Client module to publish DNS records from an event message. Once an
+event message is done (either successfully published, or met with
+errors along the way), it will placed into the appropriate channel,
+either the ``success_channel`` or ``error_channel`` to be further
+handled by the ``gordon`` core system.
+
+.. attention::
+    The publisher client is an internal module for the core gordon
+    logic. No other use cases are expected.
 """
 
-from gordon.interfaces.dns_client import IDNSProviderClient
+import zope.interface
+from gordon import interfaces
 
 
-class CloudDNSClient(IDNSProviderClient):
-    """IDNSProviderClient provider for Google Cloud DNS.
+@zope.interface.implementer(interfaces.IPublisherClient)
+class GDNSPublisher:
+    """Publish records to Google Cloud DNS.
 
     Args:
         config (dict): configuration relevant to Cloud DNS.
+        success_channel (asyncio.Queue): a sink for successfully
+            processed :interface:`interfaces.IEventMessages`.
+        error_channel (asyncio.Queue): a sink for
+            :interface:`interfaces.IEventMessages` that were not
+            processed due to problems.
     """
-    name = 'Google Cloud DNS'
+    phase = 'publish'
 
-    def __init__(self, config):
+    def __init__(self, config, success_channel, error_channel):
         self.config = config
+        self.success_channel = success_channel
+        self.error_channel = error_channel
 
-    def run(self):
+    def update_phase(self):
         # do something
         pass  # pragma: no cover
