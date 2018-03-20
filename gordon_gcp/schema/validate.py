@@ -41,8 +41,14 @@ To use:
     >>> validator = validate.MessageValidator()
     >>> validator.schemas
     {
-        'event': {'title': 'Generic Event Message', 'type': 'object', 'required': ...},
-        'audit-log': {'title': 'Google Audit Log Message', 'type': 'object', 'required': ...}
+        'event': {
+            'title': 'Generic Event Message',
+            'type': 'object',
+            'required': ...},
+        'audit-log': {
+            'title': 'Google Audit Log Message',
+            'type': 'object',
+            'required': ...}
     }
     >>> example_message = {'foo': 'bar'}
     >>> validator.validate(example_message, 'event')
