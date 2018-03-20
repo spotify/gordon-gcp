@@ -19,18 +19,18 @@ import asyncio
 import pytest  # NOQA
 from gordon import interfaces
 
-from gordon_gcp import pubsub
+from gordon_gcp.plugins import event_consumer
 
 
 def test_implements_interface():
     """GPSEventConsumer implements IEventConsumerClient"""
     config = {'foo': 'bar'}
     success, error = asyncio.Queue(), asyncio.Queue()
-    client = pubsub.GPSEventConsumer(config, success, error)
+    client = event_consumer.GPSEventConsumer(config, success, error)
 
     assert interfaces.IEventConsumerClient.providedBy(client)
     assert interfaces.IEventConsumerClient.implementedBy(
-        pubsub.GPSEventConsumer)
+        event_consumer.GPSEventConsumer)
     assert config is client.config
     assert success is client.success_channel
     assert error is client.error_channel

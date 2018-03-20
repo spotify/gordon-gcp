@@ -23,9 +23,10 @@ User Guide
 .. toctree::
    :maxdepth: 1
 
-   providers
+   config
    schema
    validate
+   plugins
 
 
 Project Information

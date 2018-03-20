@@ -32,6 +32,9 @@ import zope.interface
 from gordon import interfaces
 
 
+__all__ = ('GCEEnricher',)
+
+
 @zope.interface.implementer(interfaces.IEnricherClient)
 class GCEEnricher:
     """Get needed instance information from Google Compute Engine.

@@ -14,17 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__author__ = 'Lynn Root'
-__version__ = '0.0.1.dev0'
-__license__ = 'Apache 2.0'
-__email__ = 'lynn@spotify.com'
-__description__ = 'GCP Plugin for Gordon: Event-driven Cloud DNS'
-__uri__ = 'https://github.com/spotify/gordon-gcp'
-
-
-from gordon_gcp.plugins import *  # noqa: F403
+# Mainly for easier documentation reading
+from gordon_gcp.plugins.enricher import *  # noqa: F403
+from gordon_gcp.plugins.event_consumer import *  # noqa: F403
+from gordon_gcp.plugins.publisher import *  # noqa: F403
 
 
 __all__ = (
-    plugins.__all__  # noqa: F405
+    enricher.__all__ +  # noqa: F405
+    event_consumer.__all__ +  # noqa: F405
+    publisher.__all__  # noqa: F405
 )

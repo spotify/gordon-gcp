@@ -1,7 +1,7 @@
 Schema Definitions for Event Publishing
 =======================================
 
-This plugin defines two types of schemas for consuming events by the :doc:`Google PubSub plugin <pubsub>`: :ref:`audit` and a :ref:`general`.
+This plugin defines two types of schemas for consuming events by the :doc:`Google Pub/Sub Event Consumer plugin <plugins>`: :ref:`audit` and a :ref:`general`.
 
 
 
@@ -10,7 +10,7 @@ This plugin defines two types of schemas for consuming events by the :doc:`Googl
 Google Audit Log Message
 ------------------------
 
-The :ref:`audit` schema is based off of Google's `Audit Log`_ datatype for `Cloud Audit Logging`_. Documentation on setting up the exporting of Google Cloud audit logs to Google PubSub (a.k.a. a "sink") can be found `here`_. You may need to refine the export to include the following `filters`_::
+The :ref:`audit` schema is based off of Google's `Audit Log`_ datatype for `Cloud Audit Logging`_. Documentation on setting up the exporting of Google Cloud audit logs to Google Pub/Sub (a.k.a. a "sink") can be found `here`_. You may need to refine the export to include the following `filters`_::
 
 
     resource.type=gce_instance

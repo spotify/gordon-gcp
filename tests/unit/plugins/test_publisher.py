@@ -19,17 +19,17 @@ import asyncio
 import pytest  # NOQA
 from gordon import interfaces
 
-from gordon_gcp import dns
+from gordon_gcp.plugins import publisher
 
 
 def test_implements_interface():
     """GDNSPublisher implements IPublisherClient"""
     config = {'foo': 'bar'}
     success, error = asyncio.Queue(), asyncio.Queue()
-    client = dns.GDNSPublisher(config, success, error)
+    client = publisher.GDNSPublisher(config, success, error)
 
     assert interfaces.IPublisherClient.providedBy(client)
-    assert interfaces.IPublisherClient.implementedBy(dns.GDNSPublisher)
+    assert interfaces.IPublisherClient.implementedBy(publisher.GDNSPublisher)
     assert config is client.config
     assert success is client.success_channel
     assert error is client.error_channel

@@ -95,9 +95,9 @@ setup(
     packages=PACKAGES,
     entry_points={
         'gordon.plugins': [
-            'gcp.compute = gordon_gcp.compute:GCEEnricher',
-            'gcp.dns = gordon_gcp.dns:GDNSPublisher',
-            'gcp.pubsub = gordon_gcp.pubsub:GPSEventConsumer',
+            'gcp.enricher = gordon_gcp:GCEEnricher',
+            'gcp.event_consumer = gordon_gcp:GPSEventConsumer',
+            'gcp.publisher = gordon_gcp:GDNSPublisher',
         ],
     },
     data_files=[

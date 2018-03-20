@@ -19,17 +19,17 @@ import asyncio
 import pytest  # NOQA
 from gordon import interfaces
 
-from gordon_gcp import compute
+from gordon_gcp.plugins import enricher
 
 
 def test_implements_interface():
     """GCEEnricher implements IEnricherClient"""
     config = {'foo': 'bar'}
     success, error = asyncio.Queue(), asyncio.Queue()
-    client = compute.GCEEnricher(config, success, error)
+    client = enricher.GCEEnricher(config, success, error)
 
     assert interfaces.IEnricherClient.providedBy(client)
-    assert interfaces.IEnricherClient.implementedBy(compute.GCEEnricher)
+    assert interfaces.IEnricherClient.implementedBy(enricher.GCEEnricher)
     assert config is client.config
     assert success is client.success_channel
     assert error is client.error_channel
