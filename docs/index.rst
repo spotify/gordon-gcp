@@ -28,6 +28,7 @@ User Guide
    validate
    plugins
    clients
+   exceptions
 
 
 Project Information

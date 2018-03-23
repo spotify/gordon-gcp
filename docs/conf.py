@@ -104,6 +104,9 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
 
+# Avoid having to write `:py:` everywhere
+primary_domain = 'py'
+
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -169,4 +172,7 @@ man_pages = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 # TODO (econchick@): Once gordon core docs are live, add here
-intersphinx_mapping = {'python': ('https://docs.python.org/3', None)}
+intersphinx_mapping = {
+    'https://docs.python.org/3': None,
+    'https://aiohttp.readthedocs.io/en/stable/': None,
+}

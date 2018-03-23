@@ -17,6 +17,11 @@
 from gordon import exceptions as core_exceptions
 
 
+__all__ = (
+    'GCPGordonError', 'InvalidMessageError', 'GCPAuthError', 'GCPHTTPError'
+)
+
+
 class GCPGordonError(core_exceptions.GordonError):
     """General Gordon GCP Plugin Error."""
 
