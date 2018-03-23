@@ -27,6 +27,7 @@ User Guide
    schema
    validate
    plugins
+   clients
 
 
 Project Information

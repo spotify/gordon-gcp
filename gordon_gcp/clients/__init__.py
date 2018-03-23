@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright 2017 Spotify AB
+# Copyright 2018 Spotify AB
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from gordon import exceptions as core_exceptions
+# Mainly for easier documentation reading
+from gordon_gcp.clients.auth import *  # noqa: F403
+from gordon_gcp.clients.http import *  # noqa: F403
 
 
-class GCPGordonError(core_exceptions.GordonError):
-    """General Gordon GCP Plugin Error."""
-
-
-class InvalidMessageError(GCPGordonError):
-    """Consumed an invalid message from Google Pub/Sub."""
-
-
-class GCPHTTPError(GCPGordonError):
-    """An HTTP error occured."""
-
-
-class GCPAuthError(GCPGordonError):
-    """Authentication error with Google Cloud."""
+__all__ = (
+    auth.__all__ +  # noqa: F405
+    http.__all__  # noqa: F405
+)
