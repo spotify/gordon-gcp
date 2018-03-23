@@ -13,18 +13,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from gordon.interfaces.dns_client import IDNSProviderClient
+
+import asyncio
 
 import pytest  # NOQA
+from gordon import interfaces
 
-from gordon_gcp import CloudDNSClient
+from gordon_gcp.plugins import enricher
 
 
 def test_implements_interface():
-    """CloudDNSClient provides IDNSProviderClient"""
+    """GCEEnricher implements IEnricherClient"""
     config = {'foo': 'bar'}
-    client = CloudDNSClient(config)
-    assert issubclass(CloudDNSClient, IDNSProviderClient)
-    assert isinstance(client, IDNSProviderClient)
-    assert config == client.config
-    assert 'Google Cloud DNS' == client.name
+    success, error = asyncio.Queue(), asyncio.Queue()
+    client = enricher.GCEEnricher(config, success, error)
+
+    assert interfaces.IEnricherClient.providedBy(client)
+    assert interfaces.IEnricherClient.implementedBy(enricher.GCEEnricher)
+    assert config is client.config
+    assert success is client.success_channel
+    assert error is client.error_channel
+    assert 'enrich' == client.phase

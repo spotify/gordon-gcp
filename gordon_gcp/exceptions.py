@@ -19,3 +19,7 @@ from gordon import exceptions as core_exceptions
 
 class GCPGordonError(core_exceptions.GordonError):
     """General Gordon GCP Plugin Error."""
+
+
+class InvalidMessageError(GCPGordonError):
+    """Consumed an invalid message from Google Pub/Sub."""

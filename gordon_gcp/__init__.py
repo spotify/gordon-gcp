@@ -21,8 +21,10 @@ __email__ = 'lynn@spotify.com'
 __description__ = 'GCP Plugin for Gordon: Event-driven Cloud DNS'
 __uri__ = 'https://github.com/spotify/gordon-gcp'
 
-from gordon_gcp.compute import ComputeEngineClient
-from gordon_gcp.dns import CloudDNSClient
-from gordon_gcp.pubsub import PubSubClient
 
-__all__ = ['CloudDNSClient', 'ComputeEngineClient', 'PubSubClient']
+from gordon_gcp.plugins import *  # noqa: F403
+
+
+__all__ = (
+    plugins.__all__  # noqa: F405
+)

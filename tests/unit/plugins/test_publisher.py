@@ -14,18 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from gordon.interfaces.event_client import IEventClient
+import asyncio
 
 import pytest  # NOQA
+from gordon import interfaces
 
-from gordon_gcp import PubSubClient
+from gordon_gcp.plugins import publisher
 
 
 def test_implements_interface():
-    """PubSubClient provides IEventClient"""
+    """GDNSPublisher implements IPublisherClient"""
     config = {'foo': 'bar'}
-    client = PubSubClient(config)
-    assert issubclass(PubSubClient, IEventClient)
-    assert isinstance(client, IEventClient)
-    assert config == client.config
-    assert 'Google Cloud PubSub' == client.name
+    success, error = asyncio.Queue(), asyncio.Queue()
+    client = publisher.GDNSPublisher(config, success, error)
+
+    assert interfaces.IPublisherClient.providedBy(client)
+    assert interfaces.IPublisherClient.implementedBy(publisher.GDNSPublisher)
+    assert config is client.config
+    assert success is client.success_channel
+    assert error is client.error_channel
+    assert 'publish' == client.phase

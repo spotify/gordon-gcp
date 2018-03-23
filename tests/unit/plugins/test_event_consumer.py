@@ -13,18 +13,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from gordon.interfaces.reference_client import IResourceReferenceClient
+
+import asyncio
 
 import pytest  # NOQA
+from gordon import interfaces
 
-from gordon_gcp import ComputeEngineClient
+from gordon_gcp.plugins import event_consumer
 
 
 def test_implements_interface():
-    """ComputeEngineClient provides IResourceReferenceClient"""
+    """GPSEventConsumer implements IEventConsumerClient"""
     config = {'foo': 'bar'}
-    client = ComputeEngineClient(config)
-    assert issubclass(ComputeEngineClient, IResourceReferenceClient)
-    assert isinstance(client, IResourceReferenceClient)
-    assert config == client.config
-    assert 'Google Compute Engine' == client.name
+    success, error = asyncio.Queue(), asyncio.Queue()
+    client = event_consumer.GPSEventConsumer(config, success, error)
+
+    assert interfaces.IEventConsumerClient.providedBy(client)
+    assert interfaces.IEventConsumerClient.implementedBy(
+        event_consumer.GPSEventConsumer)
+    assert config is client.config
+    assert success is client.success_channel
+    assert error is client.error_channel
+    assert 'consume' == client.phase

@@ -13,25 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Module to implement the ``IDNSProviderClient`` interface defined in
-`gordon-dns <https://github.com/spotify/gordon>`_ .
-"""
 
-from gordon.interfaces.dns_client import IDNSProviderClient
+# Mainly for easier documentation reading
+from gordon_gcp.plugins.enricher import *  # noqa: F403
+from gordon_gcp.plugins.event_consumer import *  # noqa: F403
+from gordon_gcp.plugins.publisher import *  # noqa: F403
 
 
-class CloudDNSClient(IDNSProviderClient):
-    """IDNSProviderClient provider for Google Cloud DNS.
-
-    Args:
-        config (dict): configuration relevant to Cloud DNS.
-    """
-    name = 'Google Cloud DNS'
-
-    def __init__(self, config):
-        self.config = config
-
-    def run(self):
-        # do something
-        pass  # pragma: no cover
+__all__ = (
+    enricher.__all__ +  # noqa: F405
+    event_consumer.__all__ +  # noqa: F405
+    publisher.__all__  # noqa: F405
+)
