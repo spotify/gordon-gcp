@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright 2017 Spotify AB
+# Copyright 2018 Spotify AB
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,26 +13,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Common utils shared among clients."""
 
-from gordon import exceptions as core_exceptions
-
-
-__all__ = (
-    'GCPGordonError', 'InvalidMessageError', 'GCPAuthError', 'GCPHTTPError'
-)
+import platform
 
 
-class GCPGordonError(core_exceptions.GordonError):
-    """General Gordon GCP Plugin Error."""
+PY_VERSION = platform.python_version()
+DEFAULT_REQUEST_HEADERS = {
+    'X-Goog-API-Client': f'custom-aiohttp-gcloud-python/{PY_VERSION} gccl',
+    'Accept-Encoding': 'gzip',
+    'User-Agent': 'custom-aiohttp-gcloud-python',
+}
 
-
-class InvalidMessageError(GCPGordonError):
-    """Consumed an invalid message from Google Pub/Sub."""
-
-
-class GCPHTTPError(GCPGordonError):
-    """An HTTP error occured."""
-
-
-class GCPAuthError(GCPGordonError):
-    """Authentication error with Google Cloud."""
+# aiohttp does not log client request/responses; mimicking
+# `requests` log format
+REQ_LOG_FMT = 'Request: "{method} {url}"'
+RESP_LOG_FMT = 'Response: "{method} {url}" {status} {reason}'

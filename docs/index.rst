@@ -27,6 +27,8 @@ User Guide
    schema
    validate
    plugins
+   clients
+   exceptions
 
 
 Project Information
