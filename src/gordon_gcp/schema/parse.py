@@ -39,6 +39,9 @@ To use:
 """
 
 
+__all__ = ('MessageParser',)
+
+
 class MessageParser:
     """Parse a message provided a given GCP schema."""
     ACTION_MAPPER = {

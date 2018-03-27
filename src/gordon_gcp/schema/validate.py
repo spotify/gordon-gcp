@@ -64,6 +64,9 @@ import jsonschema
 from gordon_gcp import exceptions
 
 
+__all__ = ('MessageValidator',)
+
+
 class MessageValidator:
     """Load packaged JSON schemas and validate a given JSON message.
 

@@ -88,11 +88,20 @@ Event for an ``NS`` record:
     :language: json
 
 
+Validating
+----------
+
+
+.. automodule:: gordon_gcp.schema.validate
+.. autoclass:: gordon_gcp.MessageValidator
+    :members:
+
+
 Parsing
 -------
 
 .. automodule:: gordon_gcp.schema.parse
-.. autoclass:: gordon_gcp.schema.parse.MessageParser
+.. autoclass:: gordon_gcp.MessageParser
     :members:
 
 .. _`Audit Log`: https://cloud.google.com/logging/docs/reference/audit/auditlog/rest/Shared.Types/AuditLog

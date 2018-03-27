@@ -25,10 +25,12 @@ __uri__ = 'https://github.com/spotify/gordon-gcp'
 from gordon_gcp.clients import *  # noqa: F403
 from gordon_gcp.exceptions import *  # noqa: F403
 from gordon_gcp.plugins import *  # noqa: F403
+from gordon_gcp.schema import *  # noqa: F403
 
 
 __all__ = (
     clients.__all__ +  # noqa: F405
     exceptions.__all__ +  # noqa: F405
-    plugins.__all__  # noqa: F405
+    plugins.__all__ +  # noqa: F405
+    schema.__all__  # noqa: F405
 )
