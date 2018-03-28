@@ -101,8 +101,8 @@ setup(
         ],
     },
     data_files=[
-        'schema/schemas/audit-log.schema.json',
-        'schema/schemas/event.schema.json'
+        'gordon_gcp/schema/schemas/audit-log.schema.json',
+        'gordon_gcp/schema/schemas/event.schema.json'
     ],
     classifiers=CLASSIFIERS,
     keywords=KEYWORDS,
