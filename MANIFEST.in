@@ -1,4 +1,5 @@
 include *.txt LICENSE tox.ini .coveragerc *.rst *.toml.example OWNERS
+recursive-include gordon_gcp *.json
 recursive-include gordon_gcp *.py
 recursive-include tests *.py
 

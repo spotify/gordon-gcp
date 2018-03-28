@@ -17,6 +17,20 @@ Release v\ |release| (:doc:`What's new? <changelog>`).
    :start-after: intro-begin
 
 
+User Guide
+==========
+
+.. toctree::
+   :maxdepth: 1
+
+   config
+   schema
+   validate
+   plugins
+   clients
+   exceptions
+
+
 Project Information
 ===================
 

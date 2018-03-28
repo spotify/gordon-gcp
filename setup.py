@@ -95,11 +95,15 @@ setup(
     packages=PACKAGES,
     entry_points={
         'gordon.plugins': [
-            'gcp.compute = gordon_gcp.compute:ComputeEngineClient',
-            'gcp.dns = gordon_gcp.dns:CloudDNSClient',
-            'gcp.pubsub = gordon_gcp.pubsub:PubSubClient',
+            'gcp.enricher = gordon_gcp:GCEEnricher',
+            'gcp.event_consumer = gordon_gcp:GPSEventConsumer',
+            'gcp.publisher = gordon_gcp:GDNSPublisher',
         ],
     },
+    data_files=[
+        'schema/schemas/audit-log.schema.json',
+        'schema/schemas/event.schema.json'
+    ],
     classifiers=CLASSIFIERS,
     keywords=KEYWORDS,
     zip_safe=False,

@@ -1,0 +1,12 @@
+{
+    "action": "additions",
+    "timestamp": "2017-12-04T20:13:51.414016721Z",
+    "resourceRecords": {
+        "name": "lynntest-a-1234.spotify.net.",
+        "rrdatas": [
+            "lynntest-a-1234.foo.spotify.net."
+        ],
+        "ttl": 300,
+        "type": "CNAME"
+    }
+}

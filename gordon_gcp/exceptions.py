@@ -14,21 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__author__ = 'Lynn Root'
-__version__ = '0.0.1.dev0'
-__license__ = 'Apache 2.0'
-__email__ = 'lynn@spotify.com'
-__description__ = 'GCP Plugin for Gordon: Event-driven Cloud DNS'
-__uri__ = 'https://github.com/spotify/gordon-gcp'
-
-
-from gordon_gcp.clients import *  # noqa: F403
-from gordon_gcp.exceptions import *  # noqa: F403
-from gordon_gcp.plugins import *  # noqa: F403
+from gordon import exceptions as core_exceptions
 
 
 __all__ = (
-    clients.__all__ +  # noqa: F405
-    exceptions.__all__ +  # noqa: F405
-    plugins.__all__  # noqa: F405
+    'GCPGordonError', 'InvalidMessageError', 'GCPAuthError', 'GCPHTTPError'
 )
+
+
+class GCPGordonError(core_exceptions.GordonError):
+    """General Gordon GCP Plugin Error."""
+
+
+class InvalidMessageError(GCPGordonError):
+    """Consumed an invalid message from Google Pub/Sub."""
+
+
+class GCPHTTPError(GCPGordonError):
+    """An HTTP error occured."""
+
+
+class GCPAuthError(GCPGordonError):
+    """Authentication error with Google Cloud."""

@@ -8,12 +8,12 @@ handlers = ["syslog"]
 [gcp]
 project = "my-gcp-project"
 
-[gcp.compute]
+[gcp.enricher]
 keyfile = "/path/to/keyfiles/compute.json"
 
-[gcp.dns]
-keyfile = "/path/to/keyfiles/dns.json"
-
-[gcp.pubsub]
-project = "my-pubsub-project"
+[gcp.event_consumer]
 keyfile = "/path/to/keyfiles/pubsub.json"
+
+[gcp.publisher]
+project = "my-dns-project"
+keyfile = "/path/to/keyfiles/dns.json"

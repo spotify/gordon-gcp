@@ -1,0 +1,64 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "id": "https://github.com/spotify/gordon-gcp/blob/master/gordon_gcp/schemas/event.schema.json",
+    "title": "Generic Event Messages",
+    "description": "Schema for parsing generic event messages",
+    "required": ["action", "timestamp", "resourceRecords"],
+    "properties": {
+        "action": {
+            "description": "Add or delete resource record sets (rrdatas) listed",
+            "type": "string",
+            "enum": ["additions", "deletions"]
+        },
+        "timestamp": {
+            "type": "string",
+            "description": "Time the message was emitted",
+            "examples": [
+                "2018-01-01T23:13:45.123456789Z"
+            ],
+            "pattern": "^(\\d+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\\.\\d+)([Zz]|([\\+|\\-]([01][0-9]|2[0-3]):[0-5][0-9]))"
+        },
+        "resourceRecords": {
+            "description": "DNS resource records upon which to act",
+            "type": "object",
+            "required": ["name", "rrdatas", "type"],
+            "properties": {
+                "name": {
+                    "description": "Record name",
+                    "type": "string",
+                    "examples": [
+                        "www.example.com.",
+                        "some-fqdn.subdomain.example.com."
+                    ]
+                },
+                "rrdatas": {
+                    "description": "Resource record(s) that `name` point to",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    },
+                    "uniqueItems": true,
+                    "examples": [
+                        "198.1.1.50",
+                        "example.com.",
+                        "some text value"
+                    ]
+                },
+                "ttl": {
+                    "description": "TTL in seconds; default 300 seconds",
+                    "type": "number",
+                    "maximum": 86400,
+                    "minimum": 300,
+                    "default": 300
+                },
+                "type": {
+                    "description": "Type of resource record(s) as supported by Google Cloud DNS",
+                    "type": "string",
+                    "enum": ["A", "AAAA", "CNAME", "MX", "NS", "PTR", "SOA", "SRV", "TXT"]
+                }
+            }
+        }
+    }
+}
