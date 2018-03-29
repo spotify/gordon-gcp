@@ -82,7 +82,7 @@ author = 'Matt Obarzanek, Lynn Root, Amy Skinner, Steven Stone, James Wen'
 # built documents.
 #
 # The full version, including alpha/beta/rc tags.
-release = find_version('../gordon_gcp/__init__.py')
+release = find_version('../src/gordon_gcp/__init__.py')
 # The short X.Y version.
 version = release.rsplit(u'.', 1)[0]
 

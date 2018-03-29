@@ -19,6 +19,7 @@ import codecs
 import os
 import re
 
+from setuptools import find_packages
 from setuptools import setup
 
 
@@ -63,8 +64,8 @@ def install_requires():
 #####
 NAME = 'gordon-dns-gcp'
 PACKAGE_NAME = 'gordon_gcp'
-PACKAGES = ['gordon_gcp']
-META_PATH = os.path.join(PACKAGE_NAME, '__init__.py')
+PACKAGES = find_packages(where='src')
+META_PATH = os.path.join('src', PACKAGE_NAME, '__init__.py')
 KEYWORDS = ['dns', 'gcp', 'gce', 'pubsub' 'google cloud platform']
 CLASSIFIERS = [
     'Development Status :: 1 - Planning',
@@ -93,6 +94,7 @@ setup(
     maintainer=find_meta('author'),
     maintainer_email=find_meta('email'),
     packages=PACKAGES,
+    package_dir={'': 'src'},
     entry_points={
         'gordon.plugins': [
             'gcp.enricher = gordon_gcp:GCEEnricher',
@@ -100,10 +102,7 @@ setup(
             'gcp.publisher = gordon_gcp:GDNSPublisher',
         ],
     },
-    data_files=[
-        'gordon_gcp/schema/schemas/audit-log.schema.json',
-        'gordon_gcp/schema/schemas/event.schema.json'
-    ],
+    include_package_data=True,
     classifiers=CLASSIFIERS,
     keywords=KEYWORDS,
     zip_safe=False,
