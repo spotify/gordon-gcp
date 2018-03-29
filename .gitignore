@@ -58,3 +58,7 @@ docs/_build/
 
 # Service-specific configuration
 gordon*.toml
+
+
+# pytest
+.pytest_cache/
