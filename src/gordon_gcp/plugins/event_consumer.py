@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright 2017 Spotify AB
+# Copyright 2017-2018 Spotify AB
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,10 +30,50 @@ work is complete.
 
 """
 
+import datetime
+
 import zope.interface
 from gordon import interfaces
 
-__all__ = ('GPSEventConsumer',)
+
+__all__ = ('GEventMessage', 'GPSEventConsumer')
+
+
+@zope.interface.implementer(interfaces.IEventMessage)
+class GEventMessage:
+    """Represent a unit of work related to Google Cloud.
+
+    Args:
+        pubsub_msg (google.cloud.pubsub_v1.subscriber.message.Message):
+            Google Pub/Sub message.
+        data (dict): data to be enriched (if record info is missing) via
+            the IEnricher plugin, or to be published via the IPublisher
+            plugin.
+        phase (str): (optional) starting phase of the message. Defaults
+            to ``None``.
+    """
+    def __init__(self, pubsub_msg, data, phase=None):
+        self.msg_id = pubsub_msg._ack_id
+        self._pubsub_msg = pubsub_msg
+        self.data = data
+        self.phase = phase
+        self.history_log = []
+
+    def append_to_history(self, message, plugin):
+        """Add to log history of the message.
+
+        Args:
+            message (str): log entry message
+            plugin (str): plugin that created the log entry message.
+        """
+        datefmt = '%Y-%m-%dT%H:%M:%S.%fZ%z'  # 2018-03-27T13:29:12.623222Z
+        now = datetime.datetime.utcnow()
+        log_item = {
+            'timestamp': now.strftime(datefmt),
+            'plugin': plugin,
+            'message': message
+        }
+        self.history_log.append(log_item)
 
 
 @zope.interface.implementer(interfaces.IEventConsumerClient)
