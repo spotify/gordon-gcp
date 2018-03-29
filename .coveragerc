@@ -1,13 +1,13 @@
 [run]
 branch = True
 source =
-    gordon
+    gordon_gcp
 
 [paths]
 source =
-   gordon
-   .tox/*/lib/python*/site-packages/gordon
-   .tox/pypy/site-packages/gordon
+   src/gordon_gcp
+   .tox/*/lib/python*/site-packages/gordon_gcp
+   .tox/pypy/site-packages/gordon_gcp
 
 [report]
 show_missing = True
