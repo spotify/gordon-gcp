@@ -16,6 +16,7 @@
 
 import datetime
 import json
+from unittest import mock
 
 import aiohttp
 import pytest
@@ -79,8 +80,6 @@ params = [
 async def test_set_valid_token(token, expiry, exp_mocked_refresh, client,
                                monkeypatch):
     """Refresh tokens if invalid or not set."""
-    datetime.datetime = conftest.MockDatetime
-
     mock_refresh_token_called = 0
 
     async def mock_refresh_token():
@@ -93,7 +92,10 @@ async def test_set_valid_token(token, expiry, exp_mocked_refresh, client,
     monkeypatch.setattr(
         client._auth_client, 'refresh_token', mock_refresh_token)
 
-    await client.set_valid_token()
+    patch = 'gordon_gcp.clients.http.datetime.datetime'
+    with mock.patch(patch, conftest.MockDatetime):
+        await client.set_valid_token()
+
     assert exp_mocked_refresh == mock_refresh_token_called
 
 

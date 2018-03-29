@@ -15,9 +15,8 @@
 # limitations under the License.
 
 import asyncio
-import datetime
-import functools
 import json
+import threading
 
 import pytest
 from google.cloud import pubsub
@@ -28,6 +27,10 @@ from gordon_gcp import exceptions
 from gordon_gcp.plugins import event_consumer
 from gordon_gcp.schema import parse
 from gordon_gcp.schema import validate
+from tests.unit import conftest
+
+
+DATETIME_PATCH = 'gordon_gcp.plugins.event_consumer.datetime.datetime'
 
 
 #####
@@ -79,24 +82,9 @@ def test_implements_message_interface(phase, pubsub_msg, raw_msg_data):
     assert phase == msg.phase
 
 
-# pytest prevents monkeypatching datetime directly
-class MockDatetime(datetime.datetime):
-    @classmethod
-    def utcnow(cls):
-        return datetime.datetime(2018, 1, 1, 11, 30, 0)
-
-
-def patch_datetime(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        datetime.datetime = MockDatetime
-        return func(*args, **kwargs)
-    return wrapper
-
-
-@patch_datetime
-def test_event_msg_append_to_history(pubsub_msg, raw_msg_data):
+def test_event_msg_append_to_history(mocker, pubsub_msg, raw_msg_data):
     """Write entry to event message history log."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
     msg = event_consumer.GEventMessage(pubsub_msg, raw_msg_data)
     entry_msg = 'an entry'
     plugin = 'test-plugin'
@@ -270,9 +258,9 @@ async def test_handle_pubsub_msg_invalid(mocker, monkeypatch, consumer, caplog,
     assert 3 == len(caplog.records)
 
 
-@patch_datetime
-def test_create_gevent_msg(pubsub_msg, raw_msg_data, validator):
+def test_create_gevent_msg(mocker, pubsub_msg, raw_msg_data, validator):
     """Create an instance of GEventMessage with a pubsub message."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
     config = {'subscription': 'foo'}
     # bare bones consumer
     consumer = event_consumer.GPSEventConsumer(
@@ -319,11 +307,11 @@ def test_get_and_validate_pubsub_msg_schema(mocker, pubsub_msg, validator,
     assert expected == schema
 
 
-@patch_datetime
 @pytest.mark.asyncio
 @pytest.mark.parametrize('init_phase', (None, 'emo'))
 async def test_update_phase(init_phase, mocker, consumer, pubsub_msg):
     """Phase of a GEventMessage instance is updated."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
     event_msg = event_consumer.GEventMessage(pubsub_msg, {}, phase=init_phase)
 
     assert init_phase == event_msg.phase  # sanity check
@@ -338,11 +326,16 @@ async def test_update_phase(init_phase, mocker, consumer, pubsub_msg):
     assert exp_entry in event_msg.history_log
 
 
-@patch_datetime
 @pytest.mark.asyncio
 async def test_cleanup(mocker, consumer, caplog, pubsub_msg):
     """Consumer acks Pub/Sub message."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
+
     event_msg = event_consumer.GEventMessage(pubsub_msg, {})
+    mock_event = mocker.Mock(threading.Event)
+    mock_thread = mocker.Mock(event_consumer._GPSThread)
+    ack_id = 'projects/a-project/subscriptions/test-sub:1413'
+    consumer._threads[ack_id] = (mock_event, mock_thread)
 
     await consumer.cleanup(event_msg)
 
