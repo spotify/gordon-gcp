@@ -20,7 +20,7 @@ The :ref:`audit` schema is based off of Google's `Audit Log`_ datatype for `Clou
 Schema Definition
 ~~~~~~~~~~~~~~~~~
 
-.. literalinclude:: ../gordon_gcp/schema/schemas/audit-log.schema.json
+.. literalinclude:: ../src/gordon_gcp/schema/schemas/audit-log.schema.json
     :language: json
 
 Examples
@@ -29,19 +29,19 @@ Examples
 Audit Log Message with an ``operation.first`` key:
 **************************************************
 
-.. literalinclude:: ../gordon_gcp/schema/examples/audit-log.first-operation.json
+.. literalinclude:: ../src/gordon_gcp/schema/examples/audit-log.first-operation.json
     :language: json
 
 Audit Log Message with an ``operation.last`` key:
 *************************************************
 
-.. literalinclude:: ../gordon_gcp/schema/examples/audit-log.last-operation.json
+.. literalinclude:: ../src/gordon_gcp/schema/examples/audit-log.last-operation.json
     :language: json
 
 Audit Log Message with no ``operation`` object:
 ***********************************************
 
-.. literalinclude:: ../gordon_gcp/schema/examples/audit-log.no-operation.json
+.. literalinclude:: ../src/gordon_gcp/schema/examples/audit-log.no-operation.json
     :language: json
 
 
@@ -55,7 +55,7 @@ The :ref:`general` schema is meant for any event that may not come from Google's
 Schema Definition
 ~~~~~~~~~~~~~~~~~
 
-.. literalinclude:: ../gordon_gcp/schema/schemas/event.schema.json
+.. literalinclude:: ../src/gordon_gcp/schema/schemas/event.schema.json
     :language: json
 
 
@@ -65,21 +65,21 @@ Examples
 Event for an ``A`` record:
 **************************
 
-.. literalinclude:: ../gordon_gcp/schema/examples/event.A.json
+.. literalinclude:: ../src/gordon_gcp/schema/examples/event.A.json
     :language: json
 
 
 Event for an ``CNAME`` record:
 ******************************
 
-.. literalinclude:: ../gordon_gcp/schema/examples/event.CNAME.json
+.. literalinclude:: ../src/gordon_gcp/schema/examples/event.CNAME.json
     :language: json
 
 
 Event for an ``NS`` record:
 ***************************
 
-.. literalinclude:: ../gordon_gcp/schema/examples/event.NS.json
+.. literalinclude:: ../src/gordon_gcp/schema/examples/event.NS.json
     :language: json
 
 
