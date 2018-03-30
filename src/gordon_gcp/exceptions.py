@@ -36,3 +36,7 @@ class GCPHTTPError(GCPGordonError):
 
 class GCPAuthError(GCPGordonError):
     """Authentication error with Google Cloud."""
+
+
+class GCPConfigError(GCPGordonError):
+    """Improper or incomplete configuration for plugin."""
