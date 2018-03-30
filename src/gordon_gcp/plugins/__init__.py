@@ -14,14 +14,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from gordon_gcp.plugins import event_consumer
 # Mainly for easier documentation reading
 from gordon_gcp.plugins.enricher import *  # noqa: F403
 from gordon_gcp.plugins.event_consumer import *  # noqa: F403
 from gordon_gcp.plugins.publisher import *  # noqa: F403
 
-
 __all__ = (
     enricher.__all__ +  # noqa: F405
     event_consumer.__all__ +  # noqa: F405
-    publisher.__all__  # noqa: F405
+    publisher.__all__ +  # noqa: F405
+    ('get_event_consumer',)
 )
+
+
+def get_event_consumer(config, success_channel, error_channel, **kwargs):
+    """Get a GPSEventConsumer client.
+
+    A factory function that validates configuration, creates schema
+    validator and parser clients, creates an auth and a pubsub client,
+    and returns an event consumer (:interface:`gordon.interfaces.
+    IEventConsumerClient`) provider.
+
+    Args:
+        config (dict): Google Cloud Pub/Sub-related configuration.
+        success_channel (asyncio.Queue): queue to place a successfully
+            consumed message to be further handled by the ``gordon``
+            core system.
+        error_channel (asyncio.Queue): queue to place a message met
+            with errors to be further handled by the ``gordon`` core
+            system.
+        kwargs (dict): Additional keyword arguments to pass to the
+            event consumer.
+    Returns:
+        A :class:`GPSEventConsumer` instance.
+    """
+    builder = event_consumer.GPSEventConsumerBuilder(
+        config, success_channel, error_channel, **kwargs)
+    return builder.build_event_consumer()

@@ -30,18 +30,22 @@ work is complete.
 
 """
 
+import asyncio
 import datetime
 import json
 import logging
+import os
 
 import zope.interface
-from google.cloud import pubsub  # NOQA
+from google.api_core import exceptions as google_exceptions
+from google.cloud import pubsub
 from gordon import interfaces
 
 from gordon_gcp import exceptions
+from gordon_gcp.clients import auth
 from gordon_gcp.plugins import _utils
-from gordon_gcp.schema import parse  # NOQA
-from gordon_gcp.schema import validate  # NOQA
+from gordon_gcp.schema import parse
+from gordon_gcp.schema import validate
 
 
 __all__ = ('GEventMessage', 'GPSEventConsumer')
@@ -82,6 +86,121 @@ class GEventMessage:
             'message': message
         }
         self.history_log.append(log_item)
+
+
+class GPSEventConsumerBuilder:
+    """Build and configure a :class:`GPSEventConsumer` object.
+
+    Args:
+        config (dict): Google Cloud Pub/Sub-related configuration.
+        success_channel (asyncio.Queue): queue to place a successfully
+            consumed message to be further handled by the ``gordon``
+            core system.
+        error_channel (asyncio.Queue): queue to place a message met
+            with errors to be further handled by the ``gordon`` core
+            system.
+        kwargs (dict): Additional keyword arguments to pass to the
+            event consumer.
+    """
+    def __init__(self, config, success_channel, error_channel, **kwargs):
+        self.config = config
+        self.success_channel = success_channel
+        self.error_channel = error_channel
+        self.kwargs = kwargs
+
+    def _validate_config(self):
+        errors = []
+        # req keys: keyfile, project, topic, subscription
+        # TODO (lynn): keyfile won't be required once we support other
+        #              auth methods
+        if not self.config.get('keyfile'):
+            msg = ('The path to a Service Account JSON keyfile is required to '
+                   'authenticate for Google Cloud Pub/Sub.')
+            errors.append(msg)
+
+        if not self.config.get('project'):
+            msg = ('The GCP project where Cloud Pub/Sub is located is '
+                   'required.')
+            errors.append(msg)
+
+        if not self.config.get('topic'):
+            msg = ('A topic for the client to subscribe to in Cloud Pub/Sub is '
+                   'required.')
+            errors.append(msg)
+
+        if not self.config.get('subscription'):
+            msg = ('A subscription for the client to pull messages from in '
+                   'Cloud Pub/Sub is required.')
+            errors.append(msg)
+
+        if errors:
+            exp_msg = 'Invalid configuration:\n'
+            for error in errors:
+                logging.error(error)
+                exp_msg += error + '\n'
+            raise exceptions.GCPConfigError(exp_msg)
+
+        topic_prefix = f'projects/{self.config["project"]}/topics/'
+        if not self.config.get('topic').startswith(topic_prefix):
+            self.config['topic'] = f'{topic_prefix}{self.config["topic"]}'
+
+        sub_prefix = f'projects/{self.config["project"]}/subscriptions/'
+        if not self.config.get('subscription').startswith(sub_prefix):
+            sub = f'{sub_prefix}{self.config["subscription"]}'
+            self.config['subscription'] = sub
+
+    def _init_auth(self):
+        # a publisher client can't be made with credentials if a channel is
+        # already made/provided, which is what happens when the emulator is
+        # running ಠ_ಠ
+        # See (https://github.com/GoogleCloudPlatform/
+        #      google-cloud-python/pull/4839)
+        auth_client = None
+        if not os.environ.get('PUBSUB_EMULATOR_HOST'):
+            scopes = self.config.get('scopes')
+            # creating a dummy `session` as the pubsub.PublisherClient never
+            # uses it but without it aiohttp will complain about an unclosed
+            # client session that would otherwise be made by default
+            auth_client = auth.GAuthClient(
+                keyfile=self.config['keyfile'], scopes=scopes, session='noop')
+        return auth_client
+
+    def _init_subscriber_client(self, auth_client):
+        # Silly emulator constraints
+        creds = getattr(auth_client, 'creds', None)
+        client = pubsub.SubscriberClient(credentials=creds)
+        try:
+            client.create_subscription(
+                self.config['topic'], self.config['subscription'])
+
+        except google_exceptions.AlreadyExists:
+            # subscription already exists
+            pass
+
+        except google_exceptions.NotFound as e:
+            msg = f'Topic "{self.config["topic"]}" does not exist.'
+            logging.error(msg, exc_info=e)
+            raise exceptions.GCPGordonError(msg)
+
+        except Exception as e:
+            sub = self.config['subscription']
+            msg = f'Error trying to create subscription "{sub}": {e}'
+            logging.error(msg, exc_info=e)
+            raise exceptions.GCPGordonError(msg)
+
+        return client
+
+    def build_event_consumer(self):
+        self._validate_config()
+        validator = validate.MessageValidator()
+        parser = parse.MessageParser()
+        auth_client = self._init_auth()
+        subscriber = self._init_subscriber_client(auth_client)
+        loop = self.kwargs.get('loop', asyncio.get_event_loop())
+
+        return GPSEventConsumer(
+            self.config, subscriber, validator, parser, self.success_channel,
+            self.error_channel, loop)
 
 
 @zope.interface.implementer(interfaces.IEventConsumerClient)
