@@ -106,6 +106,11 @@ def exp_sub(config):
     return f'projects/{config["project"]}/subscriptions/{subscription}'
 
 
+# For some reason, the event loop for this test leaks over to
+# tests.unit.plugins.test_event_consumer:test_gpsthread_add_task so
+# there's a warning of not awaiting the coroutine (which is expected).
+# Threads + asyncio + testing is hard.
+@pytest.mark.filterwarnings('ignore:coroutine')
 @pytest.mark.parametrize('local,provide_loop,topic,sub', [
     (True, True, 'a-topic',
      'projects/test-example/subscriptions/a-subscription'),
@@ -135,7 +140,7 @@ def test_get_event_consumer(local, provide_loop, topic, sub, config, exp_topic,
         creds = auth_client.return_value.creds
     subscriber_client.assert_called_once_with(credentials=creds)
     sub_inst = subscriber_client.return_value
-    sub_inst.create_subscription.assert_called_once_with(exp_topic, exp_sub)
+    sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     assert client._validator
     assert client._parser
@@ -188,7 +193,7 @@ def test_get_event_consumer_raises_topic(config, auth_client, subscriber_client,
 
     with pytest.raises(exceptions.GCPGordonError) as e:
         plugins.get_event_consumer(config, success_chnl, error_chnl)
-        sub_inst.create_subscription.assert_called_once_with(exp_topic, exp_sub)
+        sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Topic "{exp_topic}" does not exist.')
     assert 3 == len(caplog.records)
@@ -205,7 +210,7 @@ def test_get_event_consumer_raises(config, auth_client, subscriber_client,
 
     with pytest.raises(exceptions.GCPGordonError) as e:
         plugins.get_event_consumer(config, success_chnl, error_chnl)
-        sub_inst.create_subscription.assert_called_once_with(exp_topic, exp_sub)
+        sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Error trying to create subscription "{exp_sub}"')
     assert 3 == len(caplog.records)
@@ -224,4 +229,4 @@ def test_get_event_consumer_sub_exists(config, auth_client, subscriber_client,
 
     assert client._subscriber
 
-    sub_inst.create_subscription.assert_called_once_with(exp_topic, exp_sub)
+    sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
