@@ -31,10 +31,13 @@ work is complete.
 """
 
 import asyncio
+import concurrent.futures
 import datetime
+import functools
 import json
 import logging
 import os
+import threading
 
 import zope.interface
 from google.api_core import exceptions as google_exceptions
@@ -65,7 +68,7 @@ class GEventMessage:
             to ``None``.
     """
     def __init__(self, pubsub_msg, data, phase=None):
-        self.msg_id = pubsub_msg._ack_id
+        self.msg_id = pubsub_msg._ack_id.split(':')[-1]
         self._pubsub_msg = pubsub_msg
         self.data = data
         self.phase = phase
@@ -169,9 +172,10 @@ class GPSEventConsumerBuilder:
         # Silly emulator constraints
         creds = getattr(auth_client, 'creds', None)
         client = pubsub.SubscriberClient(credentials=creds)
+
         try:
             client.create_subscription(
-                self.config['topic'], self.config['subscription'])
+                self.config['subscription'], self.config['topic'])
 
         except google_exceptions.AlreadyExists:
             # subscription already exists
@@ -188,19 +192,66 @@ class GPSEventConsumerBuilder:
             logging.error(msg, exc_info=e)
             raise exceptions.GCPGordonError(msg)
 
-        return client
+        return client.subscribe(self.config['subscription'])
 
     def build_event_consumer(self):
         self._validate_config()
         validator = validate.MessageValidator()
         parser = parse.MessageParser()
         auth_client = self._init_auth()
-        subscriber = self._init_subscriber_client(auth_client)
+        subscription = self._init_subscriber_client(auth_client)
         loop = self.kwargs.get('loop', asyncio.get_event_loop())
 
         return GPSEventConsumer(
-            self.config, subscriber, validator, parser, self.success_channel,
+            self.config, subscription, validator, parser, self.success_channel,
             self.error_channel, loop)
+
+
+class _GPSThread(threading.Thread):
+    """Pub/Sub Message-specific thread with its own asyncio event loop.
+
+    .. attention::
+        This thread class is not meant to be worked with directly.
+
+    Google's Pub/Sub library is blocking. This thread class allows us
+    to create work in another thread/loop and not block the main event
+    loop within Gordon.
+
+    Inspiration directly from https://stackoverflow.com/a/29302684
+
+    Args:
+        event (threading.Event): event for thread instance to await
+            signal (via ``event.wait()``) to start work.
+        name (str): thread name
+        daemon (bool): whether the thread should be daemonized or not.
+            Defaults to ``False``.
+    """
+    def __init__(self, event, name=None, daemon=False):
+        super().__init__(name=name, daemon=daemon)
+        self.loop = None
+        self.thread_id = None
+        self.event = event
+
+    def run(self):
+        """Create and start thread's own event loop."""
+        self.loop = asyncio.new_event_loop()
+        self.thread_id = threading.current_thread()
+        self.loop.call_soon(self.event.set)
+        self.loop.run_forever()
+
+    def stop(self):
+        """Stop the thread's event loop. Thread safe."""
+        self.loop.call_soon_threadsafe(self.loop.stop)
+
+    def add_task(self, coro):
+        """Schedule a task to the thread's event loop. Thread safe.
+
+        Args:
+            coro: an asyncio `coroutine <https://docs.python.org/3/
+                library/asyncio-task.html#coroutine>`_ function
+        """
+        f = functools.partial(asyncio.ensure_future, coro, loop=self.loop)
+        self.loop.call_soon_threadsafe(f)
 
 
 @zope.interface.implementer(interfaces.IEventConsumerClient)
@@ -239,6 +290,7 @@ class GPSEventConsumer:
         self._message_schemas = validator.schemas.keys()
         self._loop = loop
         self._logger = logging.getLogger('')
+        self._threads = {}
 
     async def cleanup(self, event_msg):
         """Ack Pub/Sub message and update event message history.
@@ -249,13 +301,18 @@ class GPSEventConsumer:
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': event_msg.msg_id})
 
-        msg_logger.info(f'Acking message.')
+        msg_logger.debug(f'Acking message.')
         # "blocking" method but just puts msg on a request queue that
         # google.cloud.pubsub manages with threads+grpc
         event_msg._pubsub_msg.ack()
 
         msg = 'Acknowledged message in Pub/Sub.'
         event_msg.append_to_history(msg, self.phase)
+
+        event, thread = self._threads[event_msg._pubsub_msg._ack_id]
+        event.set()
+        thread.stop()
+
         msg_logger.info(f'Message is done processing.')
 
     async def update_phase(self, event_msg, phase=None):
@@ -297,7 +354,7 @@ class GPSEventConsumer:
 
         try:
             data = json.loads(pubsub_msg.data)
-            msg_logger.info(f'Received data: {data}')
+            msg_logger.debug(f'Received data: {data}')
         except json.JSONDecodeError as e:
             msg = ('Issue loading message data as JSON. '
                    f'Given data: {pubsub_msg.data}')
@@ -311,22 +368,55 @@ class GPSEventConsumer:
             pubsub_msg.ack()
             return
 
-        msg_logger.info(f'Message is valid for "{schema}" schema.')
+        msg_logger.debug(f'Message is valid for "{schema}" schema.')
 
         event_msg_data = self._parser.parse(data, schema)
-        event_msg = self._create_gevent_msg(pubsub_msg, event_msg_data, schema)
+        event_msg = self._create_gevent_msg(
+            pubsub_msg, event_msg_data, schema)
 
         # if the message has resource records, assume it has all info
         # it needs to be published, and therefore is already enriched
         phase = 'enrich' if event_msg_data['resourceRecords'] else 'consume'
-        msg_logger.info(f'Updating message phase to "{phase}".')
+        msg_logger.debug(f'Updating message phase to "{phase}".')
         await self.update_phase(event_msg, phase=phase)
 
-        msg_logger.info(f'Adding message to the success channel.')
+        msg_logger.debug(f'Adding message to the success channel.')
         await self.success_channel.put(event_msg)
 
-    def _create_handle_pubsub_msg_task(self, pubsub_msg):
-        self._loop.create_task(self._handle_pubsub_msg(pubsub_msg))
+    def _thread_pubsub_msg(self, pubsub_msg):
+        # Create a new thread with its own event loop to process the
+        # pubsub message.
+        event = threading.Event()
+        thread_name = f'GPSThread_msg-id_{pubsub_msg.message_id}'
+        thread = _GPSThread(event, name=thread_name, daemon=True)
+        thread.start()
+        # Block signal to the thread before start accepting tasks
+        # Let the loop's signal us, rather than sleeping
+        event.wait()
+        thread.add_task(self._handle_pubsub_msg(pubsub_msg))
+
+        # save thread to stop/clean up during self.cleanup
+        self._threads[pubsub_msg._ack_id] = (event, thread)
+
+    def _manage_subs(self):
+        # TODO (lynn): look into needing flow control, e.g.:
+        # flow_control = pubsub_v1.types.FlowControl(max_messages=10)
+        # self._subscriber.subscribe(self._subscription,
+        #     flow_control=flow_control)
+        # NOTE: automatically extends deadline in the background;
+        #       must `nack()` if can't finish. We don't proactively
+        #       `nack` in this plugin since it'll just get redelivered.
+        #       A dead process will also timeout the message, with which
+        #       it will redeliver.
+        future = self._subscriber.open(self._thread_pubsub_msg)
+
+        try:
+            # we're running in a threadpool because this is blocking
+            future.result()
+        except Exception as e:
+            self._subscriber.close()
+            logging.error(f'Issue polling subscription: {e}', exc_info=e)
+            raise exceptions.GCPGordonError(e)
 
     async def start(self):
         """Start consuming messages from Google Pub/Sub.
@@ -336,12 +426,13 @@ class GPSEventConsumer:
         :obj:`self.success_channel` to be handled by an IEnricher
         plugin.
         """
-        # TODO (lynn): look into needing flow control, e.g.:
-        # flow_control = pubsub_v1.types.FlowControl(max_messages=10)
-        # self._subscriber.subscribe(self._subscription,
-        #     flow_control=flow_control)
-
-        subscription = self._subscriber.subscribe(self._subscription)
-        # NOTE: automatically extends deadline in the background;
-        #       must `nack()` if can't finish.
-        subscription.open(self._create_handle_pubsub_msg_task)
+        main_loop = asyncio.get_event_loop()
+        # so many threads, name this so it's identifiable
+        pfx = 'ThreadPoolExecutor-GPSEventConsumer'
+        # NOTE: there should only be one thread pool executor worker
+        #       from here since this method is only called once from
+        #       gordon core, so there _should_ be no need to limit
+        #       workers
+        executor = concurrent.futures.ThreadPoolExecutor(thread_name_prefix=pfx)
+        coro = main_loop.run_in_executor(executor, self._manage_subs)
+        await asyncio.gather(coro, loop=main_loop, return_exceptions=True)
