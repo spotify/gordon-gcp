@@ -10,6 +10,7 @@ project = "my-gcp-project"
 
 [gcp.enricher]
 keyfile = "/path/to/keyfiles/compute.json"
+dns_zone = "example.com."
 
 [gcp.event_consumer]
 keyfile = "/path/to/keyfiles/pubsub.json"

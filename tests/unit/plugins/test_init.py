@@ -230,3 +230,64 @@ def test_get_event_consumer_sub_exists(config, auth_client, subscriber_client,
     assert client._subscriber
 
     sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
+
+
+#####
+# plugins.get_enricher tests
+#####
+@pytest.fixture
+def enricher_config(fake_keyfile):
+    return {'keyfile': fake_keyfile, 'dns_zone': 'example.com.'}
+
+
+@pytest.mark.parametrize('conf_retries,retries', [
+    (None, 5),
+    (10, 10)])
+def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
+                      retries):
+    """Happy path to initialize an Enricher client."""
+    mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
+    enricher_config['retries'] = conf_retries
+
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+
+    client = plugins.get_enricher(enricher_config, success_chnl, error_chnl)
+
+    assert client.config
+    assert retries == client.config['retries']
+    assert client.success_channel
+    assert client.error_channel
+    assert client._http_client
+
+
+@pytest.mark.parametrize('config_key,exc_msg', [
+    ('keyfile', 'The path to a Service Account JSON keyfile is required to '
+                'authenticate to the GCE API.'),
+    ('dns_zone', 'A dns zone is required to build correct A records.')])
+def test_get_enricher_missing_config_raises(mocker, caplog, enricher_config,
+                                            auth_client, config_key, exc_msg):
+    """Raise when configuration key is missing."""
+    mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    del enricher_config[config_key]
+
+    with pytest.raises(exceptions.GCPConfigError) as e:
+        plugins.get_enricher(enricher_config, success_chnl, error_chnl)
+
+    e.match('Invalid configuration:\n' + exc_msg)
+    assert 1 == len(caplog.records)
+
+
+def test_get_enricher_config_bad_dns_zone(mocker, caplog, enricher_config,
+                                          auth_client):
+    """Raise when 'dns_zone' config value doesn't end with root zone."""
+    mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    enricher_config['dns_zone'] = 'example.com'
+
+    with pytest.raises(exceptions.GCPConfigError) as e:
+        plugins.get_enricher(enricher_config, success_chnl, error_chnl)
+
+    exc_msg = 'A dns zone must be a FQDN and end with the root zone \("."\).'
+    e.match('Invalid configuration:\n' + exc_msg)
+    assert 1 == len(caplog.records)
