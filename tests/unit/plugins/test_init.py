@@ -15,9 +15,7 @@
 # limitations under the License.
 
 import asyncio
-import json
 
-import aiohttp
 import pytest
 from google.api_core import exceptions as google_exceptions
 from google.cloud import pubsub
@@ -25,57 +23,19 @@ from google.cloud.pubsub_v1.subscriber.policy import thread
 
 from gordon_gcp import exceptions
 from gordon_gcp import plugins
-from gordon_gcp.clients import auth
 
 
-API_BASE_URL = 'https://example.com'
-API_URL = f'{API_BASE_URL}/v1/foo_endpoint'
-
-
-@pytest.fixture(scope='session')
-def fake_keyfile_data():
-    return {
-        'type': 'service_account',
-        'project_id': 'a-test-project',
-        'private_key_id': 'yeahright',
-        'private_key': 'nope',
-        'client_email': 'test-key@a-test-project.iam.gserviceaccount.com',
-        'client_id': '12345678910',
-        'auth_uri': f'{API_BASE_URL}/auth',
-        'token_uri': f'{API_BASE_URL}/token',
-        'auth_provider_x509_cert_url': f'{API_BASE_URL}/certs',
-        'client_x509_cert_url': f'{API_BASE_URL}/x509/a-test-project'
-    }
-
-
+#####
+# plugins.get_event_consumer tests
+#####
 @pytest.fixture
-def fake_keyfile(fake_keyfile_data, tmpdir):
-    tmp_keyfile = tmpdir.mkdir('keys').join('fake_keyfile.json')
-    tmp_keyfile.write(json.dumps(fake_keyfile_data))
-    return tmp_keyfile
-
-
-@pytest.fixture
-def config(fake_keyfile):
+def consumer_config(fake_keyfile):
     return {
         'keyfile': fake_keyfile,
         'project': 'test-example',
         'topic': 'a-topic',
         'subscription': 'a-subscription'
     }
-
-
-@pytest.fixture
-async def auth_client(mocker, monkeypatch):
-    mock = mocker.Mock(auth.GAuthClient)
-    mock.token = '0ldc0ffe3'
-    mock._session = aiohttp.ClientSession()
-    creds = mocker.Mock()
-    mock.creds = creds
-    monkeypatch.setattr(
-        'gordon_gcp.plugins.event_consumer.auth.GAuthClient', mock)
-    yield mock
-    await mock._session.close()
 
 
 @pytest.fixture
@@ -95,15 +55,15 @@ def emulator(monkeypatch):
 
 
 @pytest.fixture
-def exp_topic(config):
-    topic = config['topic'].split('/')[-1]
-    return f'projects/{config["project"]}/topics/{topic}'
+def exp_topic(consumer_config):
+    topic = consumer_config['topic'].split('/')[-1]
+    return f'projects/{consumer_config["project"]}/topics/{topic}'
 
 
 @pytest.fixture
-def exp_sub(config):
-    subscription = config['subscription'].split('/')[-1]
-    return f'projects/{config["project"]}/subscriptions/{subscription}'
+def exp_sub(consumer_config):
+    subscription = consumer_config['subscription'].split('/')[-1]
+    return f'projects/{consumer_config["project"]}/subscriptions/{subscription}'
 
 
 # For some reason, the event loop for this test leaks over to
@@ -116,18 +76,18 @@ def exp_sub(config):
      'projects/test-example/subscriptions/a-subscription'),
     (False, False, 'projects/test-example/topics/a-topic', 'a-subscription'),
 ])
-def test_get_event_consumer(local, provide_loop, topic, sub, config, exp_topic,
-                            auth_client, exp_sub, subscriber_client, emulator,
-                            monkeypatch, event_loop):
+def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
+                            exp_topic, auth_client, exp_sub, subscriber_client,
+                            emulator, monkeypatch, event_loop):
     """Happy path to initialize a Publisher client."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
     if local:
         monkeypatch.setenv('PUBSUB_EMULATOR_HOST', True)
 
-    config['topic'], config['subscription'] = topic, sub
+    consumer_config['topic'], consumer_config['subscription'] = topic, sub
     kwargs = {
-        'config': config,
+        'config': consumer_config,
         'success_channel': success_chnl,
         'error_channel': error_chnl,
     }
@@ -166,24 +126,26 @@ def test_get_event_consumer(local, provide_loop, topic, sub, config, exp_topic,
     ('subscription', ('A subscription for the client to pull messages from in '
                       'Cloud Pub/Sub is required.')),
 ])
-def test_get_event_consumer_config_raises(config_key, exp_msg, config,
+def test_get_event_consumer_config_raises(config_key, exp_msg, consumer_config,
                                           auth_client, subscriber_client,
                                           caplog, emulator):
     """Raise with improper configuration."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
-    config.pop(config_key)
+    consumer_config.pop(config_key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        client = plugins.get_event_consumer(config, success_chnl, error_chnl)
+        client = plugins.get_event_consumer(consumer_config, success_chnl,
+                                            error_chnl)
         client._subscriber.create_subscription.assert_not_called()
 
     e.match('Invalid configuration:\n' + exp_msg)
     assert 1 == len(caplog.records)
 
 
-def test_get_event_consumer_raises_topic(config, auth_client, subscriber_client,
-                                         caplog, emulator, exp_topic, exp_sub):
+def test_get_event_consumer_raises_topic(consumer_config, auth_client,
+                                         subscriber_client, caplog, emulator,
+                                         exp_topic, exp_sub):
     """Raise when there is no topic to subscribe to."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -192,15 +154,16 @@ def test_get_event_consumer_raises_topic(config, auth_client, subscriber_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        plugins.get_event_consumer(config, success_chnl, error_chnl)
+        plugins.get_event_consumer(consumer_config, success_chnl, error_chnl)
         sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Topic "{exp_topic}" does not exist.')
     assert 3 == len(caplog.records)
 
 
-def test_get_event_consumer_raises(config, auth_client, subscriber_client,
-                                   caplog, emulator, exp_topic, exp_sub):
+def test_get_event_consumer_raises(consumer_config, auth_client,
+                                   subscriber_client, caplog, emulator,
+                                   exp_topic, exp_sub):
     """Raise when any other error occured with creating a subscription."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -209,15 +172,16 @@ def test_get_event_consumer_raises(config, auth_client, subscriber_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        plugins.get_event_consumer(config, success_chnl, error_chnl)
+        plugins.get_event_consumer(consumer_config, success_chnl, error_chnl)
         sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Error trying to create subscription "{exp_sub}"')
     assert 3 == len(caplog.records)
 
 
-def test_get_event_consumer_sub_exists(config, auth_client, subscriber_client,
-                                       emulator, exp_topic, exp_sub):
+def test_get_event_consumer_sub_exists(consumer_config, auth_client,
+                                       subscriber_client, emulator, exp_topic,
+                                       exp_sub):
     """Do not raise if topic already exists."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -225,7 +189,8 @@ def test_get_event_consumer_sub_exists(config, auth_client, subscriber_client,
     sub_inst = subscriber_client.return_value
     sub_inst.create_subscription.side_effect = [exp]
 
-    client = plugins.get_event_consumer(config, success_chnl, error_chnl)
+    client = plugins.get_event_consumer(consumer_config, success_chnl,
+                                        error_chnl)
 
     assert client._subscriber
 
@@ -269,7 +234,7 @@ def test_get_enricher_missing_config_raises(mocker, caplog, enricher_config,
     """Raise when configuration key is missing."""
     mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
-    del enricher_config[config_key]
+    enricher_config.pop(config_key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
         plugins.get_enricher(enricher_config, success_chnl, error_chnl)

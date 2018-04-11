@@ -64,15 +64,15 @@ class MockDatetime(datetime.datetime):
 
 
 @pytest.fixture
-def auth_client(mocker, monkeypatch):
-    mock = mocker.Mock(auth.GAuthClient, autospec=True)
+async def auth_client(mocker, monkeypatch):
+    mock = mocker.Mock(auth.GAuthClient)
     mock.token = '0ldc0ffe3'
     mock._session = aiohttp.ClientSession()
     creds = mocker.Mock()
     mock.creds = creds
     monkeypatch.setattr('gordon_gcp.clients.auth.GAuthClient', mock)
     yield mock
-    mock._session.close()
+    await mock._session.close()
 
 
 @pytest.fixture
