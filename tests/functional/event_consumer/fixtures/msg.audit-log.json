@@ -1,0 +1,135 @@
+{
+  "insertId": "-rqn4oedbw78",
+  "logName": "projects/xpn-tars-1/logs/cloudaudit.googleapis.com%2Factivity",
+  "protoPayload": {
+    "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+    "authenticationInfo": {},
+    "authorizationInfo": [
+      {
+        "granted": true,
+        "permission": "compute.instances.create"
+      },
+      {
+        "granted": true,
+        "permission": "compute.disks.create"
+      },
+      {
+        "granted": true,
+        "permission": "compute.subnetworks.use"
+      },
+      {
+        "granted": true,
+        "permission": "compute.subnetworks.useExternalIp"
+      },
+      {
+        "granted": true,
+        "permission": "compute.instances.setMetadata"
+      },
+      {
+        "granted": true,
+        "permission": "compute.instances.setTags"
+      },
+      {
+        "granted": true,
+        "permission": "compute.instances.setServiceAccount"
+      }
+    ],
+    "methodName": "v1.compute.instances.insert",
+    "request": {
+      "@type": "compute.googleapis.com/compute.instances.insert",
+      "canIpForward": false,
+      "description": "InstanceTemplate created for Dataflow job: 2018-03-21_07_23_13-10939462174997210505",
+      "disks": [
+        {
+          "autoDelete": true,
+          "boot": true,
+          "deviceName": "persistent-disk-0",
+          "initializeParams": {
+            "diskSizeGb": "250",
+            "sourceImage": "projects/dataflow-service-producer-prod/global/images/dataflow-dataflow-owned-resource-20180306-rc03"
+          },
+          "mode": "READ_WRITE",
+          "type": "PERSISTENT"
+        }
+      ],
+      "machineType": "projects/868460354448/zones/europe-west1-c/machineTypes/n1-standard-4",
+      "name": "expandimpressionjob-root--03210723-e85c-harness-z0nj",
+      "networkInterfaces": [
+        {
+          "accessConfigs": [
+            {
+              "name": "EXTERNAL NAT",
+              "networkTier": "PREMIUM",
+              "type": "ONE_TO_ONE_NAT"
+            }
+          ],
+          "network": "projects/868460354448/global/networks/default",
+          "subnetwork": "projects/868460354448/regions/europe-west1/subnetworks/default"
+        }
+      ],
+      "requestId": "03848c9c-694d-34db-9a50-91c38ec983c5",
+      "scheduling": {
+        "automaticRestart": true,
+        "onHostMaintenance": "MIGRATE",
+        "preemptible": false
+      },
+      "serviceAccounts": [
+        {
+          "email": "default",
+          "scopes": [
+            "https://www.googleapis.com/auth/any-api",
+            "https://www.googleapis.com/auth/bigquery",
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/compute",
+            "https://www.googleapis.com/auth/datastore",
+            "https://www.googleapis.com/auth/devstorage.full_control",
+            "https://www.googleapis.com/auth/logging.write",
+            "https://www.googleapis.com/auth/monitoring",
+            "https://www.googleapis.com/auth/ndev.cloudman",
+            "https://www.googleapis.com/auth/pubsub",
+            "https://www.googleapis.com/auth/userinfo.email"
+          ]
+        }
+      ],
+      "tags": {
+        "tags": [
+          "dataflow"
+        ]
+      }
+    },
+    "requestMetadata": {
+      "callerSuppliedUserAgent": "Managed Infrastructure Mixer Client"
+    },
+    "resourceName": "projects/868460354448/zones/europe-west1-c/instances/expandimpressionjob-root--03210723-e85c-harness-z0nj",
+    "response": {
+      "@type": "compute.googleapis.com/error",
+      "error": {
+        "code": 403,
+        "errors": [
+          {
+            "domain": "usageLimits",
+            "message": "Quota 'IN_USE_ADDRESSES' exceeded.  Limit: 2300.0 in region europe-west1.",
+            "reason": "quotaExceeded"
+          }
+        ],
+        "message": "Quota 'IN_USE_ADDRESSES' exceeded.  Limit: 2300.0 in region europe-west1."
+      }
+    },
+    "serviceName": "compute.googleapis.com",
+    "status": {
+      "code": 7,
+      "message": "Quota 'IN_USE_ADDRESSES' exceeded.  Limit: 2300.0 in region europe-west1."
+    }
+  },
+  "receiveTimestamp": "2018-03-21T15:21:28.986760181Z",
+  "resource": {
+    "labels": {
+      "instance_id": "",
+      "project_id": "xpn-tars-1",
+      "zone": "europe-west1-c"
+    },
+    "type": "gce_instance"
+  },
+  "severity": "ERROR",
+  "timestamp": "2018-03-21T15:21:28.101Z"
+}
