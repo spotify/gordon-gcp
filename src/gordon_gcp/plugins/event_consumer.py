@@ -68,7 +68,7 @@ class GEventMessage:
             to ``None``.
     """
     def __init__(self, pubsub_msg, data, phase=None):
-        self.msg_id = pubsub_msg._ack_id.split(':')[-1]
+        self.msg_id = pubsub_msg.message_id
         self._pubsub_msg = pubsub_msg
         self.data = data
         self.phase = phase
