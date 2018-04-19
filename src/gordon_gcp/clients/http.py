@@ -83,8 +83,8 @@ class AIOConnection:
         if not is_valid:
             await self._auth_client.refresh_token()
 
-    async def request(self, method, url, params=None, body=None,
-                      headers=None, json=None, **kwargs):
+    async def request(self, method, url, params=None, headers=None,
+                      body=None, json=None, **kwargs):
         """Make an asynchronous HTTP request.
 
         Args:
@@ -92,14 +92,14 @@ class AIOConnection:
             url (str): URL to be requested.
             params (dict): (optional) Query parameters for the request.
                 Defaults to ``None``.
+            headers (dict): (optional) HTTP headers to send with the
+                request. Headers pass through to the request will
+                include :attr:`DEFAULT_REQUEST_HEADERS`.
             body (obj): (optional) A dictionary, bytes, or file-like
                 object to send in the body of the request.
             json (obj): Any json compatible python object (optional).
                 NOTE: json and data parameters could not be used at
                 the same time.
-            headers (dict): (optional) HTTP headers to send with the
-                request. Headers pass through to the request will
-                include :attr:`DEFAULT_REQUEST_HEADERS`.
         Returns:
             (str) HTTP response body.
         Raises:
