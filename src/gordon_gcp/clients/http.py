@@ -84,7 +84,7 @@ class AIOConnection:
             await self._auth_client.refresh_token()
 
     async def request(self, method, url, params=None, body=None,
-                      headers=None, **kwargs):
+                      headers=None, json=None, **kwargs):
         """Make an asynchronous HTTP request.
 
         Args:
@@ -94,6 +94,9 @@ class AIOConnection:
                 Defaults to ``None``.
             body (obj): (optional) A dictionary, bytes, or file-like
                 object to send in the body of the request.
+            json (obj): Any json compatible python object (optional).
+                NOTE: json and data parameters could not be used at
+                the same time.
             headers (dict): (optional) HTTP headers to send with the
                 request. Headers pass through to the request will
                 include :attr:`DEFAULT_REQUEST_HEADERS`.
@@ -102,6 +105,12 @@ class AIOConnection:
         Raises:
             :exc:`.GCPHTTPError`: if any exception occurred.
         """
+        if all([body, json]):
+            msg = ('"json" and "body" request parameters can not be used '
+                   'at the same time')
+            logging.warn(msg)
+            raise exceptions.GCPHTTPError(msg)
+
         refresh_attempt = kwargs.pop('cred_refresh_attempt', 0)
 
         req_headers = headers or {}
@@ -114,9 +123,13 @@ class AIOConnection:
 
         req_kwargs = {
             'params': params,
-            'data': body,
             'headers': req_headers,
         }
+        if body:
+            req_kwargs['data'] = body
+        if json:
+            req_kwargs['json'] = json
+
         logging.debug(_utils.REQ_LOG_FMT.format(method=method.upper(), url=url))
         async with self._session.request(method, url, **req_kwargs) as resp:
             log_kw = {
