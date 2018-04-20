@@ -98,7 +98,7 @@ setup(
     entry_points={
         'gordon.plugins': [
             'gcp.enricher = gordon_gcp:GCEEnricher',
-            'gcp.event_consumer = gordon_gcp:GPSEventConsumer',
+            'gcp.event_consumer = gordon_gcp:get_event_consumer',
             'gcp.publisher = gordon_gcp:GDNSPublisher',
         ],
     },

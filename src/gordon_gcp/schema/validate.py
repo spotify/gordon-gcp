@@ -94,7 +94,7 @@ class MessageValidator:
             try:
                 with open(schema_file, 'r') as f:
                     schemas[schema_name] = json.load(f)
-                    logging.info(f'Successfully loaded schema "{schema_name}"')
+                    logging.info(f'Successfully loaded schema "{schema_name}".')
 
             except (FileNotFoundError, json.JSONDecodeError) as e:
                 msg = f'Error loading schema "{schema_name}": {e}.'
