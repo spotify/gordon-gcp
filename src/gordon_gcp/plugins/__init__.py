@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from gordon_gcp.plugins import enricher
 from gordon_gcp.plugins import event_consumer
 # Mainly for easier documentation reading
 from gordon_gcp.plugins.enricher import *  # noqa: F403
@@ -24,7 +25,7 @@ __all__ = (
     enricher.__all__ +  # noqa: F405
     event_consumer.__all__ +  # noqa: F405
     publisher.__all__ +  # noqa: F405
-    ('get_event_consumer',)
+    ('get_event_consumer', 'get_enricher')
 )
 
 
@@ -52,3 +53,28 @@ def get_event_consumer(config, success_channel, error_channel, **kwargs):
     builder = event_consumer.GPSEventConsumerBuilder(
         config, success_channel, error_channel, **kwargs)
     return builder.build_event_consumer()
+
+
+def get_enricher(config, success_channel, error_channel, **kwargs):
+    """Get a GCEEnricher client.
+
+    A factory function that validates configuration and returns an
+    enricher client (:interface:`gordon.interfaces.IEnricherClient`)
+    provider.
+
+    Args:
+        config (dict): Google Compute Engine API related configuration.
+        success_channel (asyncio.Queue): queue to place a successfully
+            enriched message to be further handled by the ``gordon``
+            core system.
+        error_channel (asyncio.Queue): queue to place a message met
+            with errors to be further handled by the ``gordon`` core
+            system.
+        kwargs (dict): Additional keyword arguments to pass to the
+            enricher.
+    Returns:
+        A :class:`GCEEnricher` instance.
+    """
+    builder = enricher.GCEEnricherBuilder(
+        config, success_channel, error_channel, **kwargs)
+    return builder.build_enricher()

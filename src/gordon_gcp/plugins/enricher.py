@@ -35,10 +35,73 @@ import zope.interface
 from gordon import interfaces
 
 from gordon_gcp import exceptions
+from gordon_gcp.clients import auth
+from gordon_gcp.clients import http
 from gordon_gcp.plugins import _utils
 
 
-__all__ = ('GCEEnricher',)
+__all__ = ('GCEEnricher', 'GCEEnricherBuilder',)
+
+
+class GCEEnricherBuilder:
+    """Build and configure a :class:`GCEEnricher` object.
+
+    Args:
+        config (dict): Google Compute Engine API related configuration.
+        success_channel (asyncio.Queue): queue to place a successfully
+            enriched message to be further handled by the ``gordon``
+            core system.
+        error_channel (asyncio.Queue): queue to place a message met
+            with errors to be further handled by the ``gordon`` core
+            system.
+        kwargs (dict): Additional keyword arguments to pass to the
+            enricher.
+    """
+    def __init__(self, config, success_channel, error_channel, **kwargs):
+        self.config = config
+        self.success_channel = success_channel
+        self.error_channel = error_channel
+        self.kwargs = kwargs
+
+    def _validate_config(self):
+        # req keys: dns_zone, keyfile
+        errors = []
+        if not self.config.get('keyfile'):
+            msg = ('The path to a Service Account JSON keyfile is required to '
+                   'authenticate to the GCE API.')
+            errors.append(msg)
+
+        if not self.config.get('dns_zone'):
+            msg = 'A dns zone is required to build correct A records.'
+            errors.append(msg)
+
+        if not self.config.get('dns_zone', '').endswith('.'):
+            msg = 'A dns zone must be a FQDN and end with the root zone (".").'
+            errors.append(msg)
+
+        if errors:
+            error_msgs = '\n'.join(errors)
+            exp_msg = f'Invalid configuration:\n{error_msgs}'
+            logging.error(error_msgs)
+            raise exceptions.GCPConfigError(exp_msg)
+
+        if not self.config.get('retries'):
+            self.config['retries'] = 5
+
+    def _init_auth(self):
+        scopes = self.config.get('scopes')
+        return auth.GAuthClient(keyfile=self.config['keyfile'],
+                                scopes=scopes)
+
+    def _init_http_client(self):
+        auth_client = self._init_auth()
+        return http.AIOConnection(auth_client=auth_client)
+
+    def build_enricher(self):
+        self._validate_config()
+        http_client = self._init_http_client()
+        return GCEEnricher(self.config, http_client, self.success_channel,
+                           self.error_channel)
 
 
 @zope.interface.implementer(interfaces.IEnricherClient)

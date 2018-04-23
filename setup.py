@@ -97,7 +97,7 @@ setup(
     package_dir={'': 'src'},
     entry_points={
         'gordon.plugins': [
-            'gcp.enricher = gordon_gcp:GCEEnricher',
+            'gcp.enricher = gordon_gcp:get_enricher',
             'gcp.event_consumer = gordon_gcp:get_event_consumer',
             'gcp.publisher = gordon_gcp:GDNSPublisher',
         ],
