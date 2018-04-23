@@ -39,17 +39,6 @@ NEW_EV_PATCH = f'{MOD_PATCH}.asyncio.new_event_loop'
 # GEventMessage tests
 #####
 @pytest.fixture(scope='session')
-def audit_log_data():
-    resource_name = ('projects/123456789101/zones/us-central1-c/instances/'
-                     'an-instance-name-b34c')
-    return {
-        'action': 'additions',
-        'resourceName': resource_name,
-        'timestamp': '2017-12-04T20:13:51.414016721Z'
-    }
-
-
-@pytest.fixture(scope='session')
 def raw_msg_data(audit_log_data):
     return {
         'protoPayload': {
@@ -151,10 +140,10 @@ def subscriber_client(mocker, monkeypatch):
 
 
 def test_event_consumer_default(subscriber_client, validator, parser,
-                                event_loop):
+                                event_loop, channel_pair):
     """GPSEventConsumer implements IEventConsumerClient"""
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
-    success, error = asyncio.Queue(), asyncio.Queue()
+    success, error = channel_pair
     client = event_consumer.GPSEventConsumer(
         config, subscriber_client, validator, parser, success, error,
         event_loop)
@@ -173,9 +162,9 @@ def test_event_consumer_default(subscriber_client, validator, parser,
 
 
 @pytest.fixture
-def consumer(subscriber_client, validator, event_loop):
+def consumer(subscriber_client, validator, event_loop, channel_pair):
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
-    success, error = asyncio.Queue(), asyncio.Queue()
+    success, error = channel_pair
     parser = parse.MessageParser()
     client = event_consumer.GPSEventConsumer(
         config, subscriber_client, validator, parser, success, error,
