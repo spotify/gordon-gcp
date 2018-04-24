@@ -15,18 +15,32 @@
 # limitations under the License.
 
 import asyncio
-
+import aiohttp
 import pytest  # NOQA
 from gordon import interfaces
 
 from gordon_gcp.plugins import publisher
+from gordon_gcp.clients import auth
+from gordon_gcp.clients import http
 
 
-def test_implements_interface():
+@pytest.mark.parametrize('provide_session', [True, False])
+def test_implements_interface(provide_session, mocker):
     """GDNSPublisher implements IPublisherClient"""
+
+    session = None
+    if provide_session:
+        session = aiohttp.ClientSession()
+
+    auth_client = mocker.Mock(auth.GAuthClient)
+    auth_client._session = aiohttp.ClientSession()
+    creds = mocker.Mock()
+    auth_client.creds = creds
+    client = http.AIOConnection(auth_client=auth_client, session=session)
+
     config = {'foo': 'bar'}
     success, error = asyncio.Queue(), asyncio.Queue()
-    client = publisher.GDNSPublisher(config, success, error)
+    client = publisher.GDNSPublisher(config, success, error, client)
 
     assert interfaces.IPublisherClient.providedBy(client)
     assert interfaces.IPublisherClient.implementedBy(publisher.GDNSPublisher)
@@ -34,3 +48,5 @@ def test_implements_interface():
     assert success is client.success_channel
     assert error is client.error_channel
     assert 'publish' == client.phase
+
+
