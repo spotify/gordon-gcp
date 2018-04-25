@@ -160,15 +160,13 @@ class GDNSPublisher:
         msg = 'Timed out waiting for DNS changes to be done'
         raise exceptions.GCPRetryMessageError(msg)
 
-    async def _publish_changes(self, zone, changes, msg_logger):
+    async def _publish_changes(self, zone, changes):
         """Post changes to the google API and sample it to
             check if the changes are done.
 
         Args:
             zone (str): the zone to make changes to
             changes (dict): the changes to make
-            msg_logger (_utils.GEventMessageLogger):
-                event message logger class
 
         Returns:
             boolean if the changes are done.
@@ -177,11 +175,13 @@ class GDNSPublisher:
 
         try:
             resp = await self.http_client.request('post', url, json=changes)
-        except exceptions.GCPHTTPError as e:
-            msg = f'Error trying to post changes: {changes},' \
-                  f' got http Error: {e}'
-            # msg_logger.error(msg, exc_info=e)
-            raise exceptions.GCPGordonError(e)
+        except Exception as e:
+            e_start = 'Issue connecting to www.googleapis.com: '
+            status_code = int(e.args[0].split(e_start)[1].split(',')[0])
+            if 400 < status_code < 500:
+                raise exceptions.GCPDropMessageError()
+            else:
+                raise e
 
         resp_dict = json.loads(resp)
 
@@ -230,23 +230,14 @@ class GDNSPublisher:
             self._logger, {'msg_id': event_msg.msg_id})
         msg_logger.info('Publisher received new message')
 
-        try:
-            zone = self._find_zone(event_msg, msg_logger)
+        zone = self._find_zone(event_msg, msg_logger)
 
-            changes = self._format_changes(event_msg, msg_logger)
+        changes = self._format_changes(event_msg, msg_logger)
 
-            await self._publish_changes(zone, changes, msg_logger)
+        await self._publish_changes(zone, changes)
 
-        except Exception as e:
-            await self.error_channel.put(event_msg)
-
-            msg = f'Error trying to publish changes: {e}'
-            # msg_logger.error(msg, exc_info=e)
-            raise exceptions.GCPHTTPError(e)
-
-        else:
-            await self.update_phase(event_msg)
-            await self.success_channel.put(event_msg)
+        await self.update_phase(event_msg)
+        await self.success_channel.put(event_msg)
 
 
 class PubSubMessage(object):
