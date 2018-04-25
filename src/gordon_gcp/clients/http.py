@@ -85,6 +85,21 @@ class AIOConnection:
 
     async def request(self, method, url, params=None, body=None,
                       headers=None, **kwargs):
+    
+    # retry
+    # timeout
+    # condfunc
+    # return resp
+    
+    # retry, timeout, condfunc closures
+    # backoff.on_exception(backoff.expo, exception=None)(foo)("asdf")
+    # predicate for condfunc or lambda x: False
+    # handle raising in wrapper
+    # or just return call.text
+    # move 401 check
+
+    async def _request(self, method, url, params=None, body=None,
+                      headers=None, **kwargs):
         """Make an asynchronous HTTP request.
 
         Args:
