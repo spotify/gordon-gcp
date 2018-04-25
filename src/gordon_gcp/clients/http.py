@@ -112,7 +112,7 @@ class AIOConnection:
                 "custom".  Last argument must be the response from _request().
                 Must return True for "continue retrying (subject to retries and
                 timeout)" or False for "stop retrying".  If the function takes
-                any other parameters, their values must be supplied in
+                any other arguments, their values must be supplied in
                 predicate_args and/or predicate_kwargs.
             predicate_args (list): (optional) See retry_predicate.
             predicate_kwargs (dict): (optional) See retry_predicate.
@@ -161,7 +161,7 @@ class AIOConnection:
 
         resp = await backoff.on_predicate(
             backoff.expo, max_tries=retries, max_time=timeout, predicate=predicate_partial, on_giveup=retry_giveup,
-        )(self._request)(method, url, params. body, headers)
+        )(self._request)(method, url, params, body, headers)
         return await resp.text()
     
         # retry from 0 or 1?
