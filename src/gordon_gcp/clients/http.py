@@ -34,10 +34,10 @@ To use:
 """
 
 import datetime
-from functools import partial
-import http.client.UNAUTHORIZED
 import json
 import logging
+from functools import partial
+from http import HTTPStatus
 
 import aiohttp
 import backoff
@@ -104,13 +104,14 @@ class AIOConnection:
                 of actual tries is subject to retry_type and timeout as well as
                 this value.
             timeout (int): (optional) Total maximum seconds to keep trying the
-                request (None == unlimited).  The number of actual tries is subject to retry_type and tries as well as this value.
+                request (None == unlimited).  The number of actual tries is
+                subject to retry_type and tries as well as this value.
             retry_predicate (callable): (optional) Function to call to decide
                 if we should keep trying the request.  Ignored unless
                 retry_type is "custom".  Must return True for "continue retrying
                 (subject to tries and timeout)" or False for "stop retrying".
                 Last argument must be the response from _request().  If the
-                function takes any other arguments, their values must be 
+                function takes any other arguments, their values must be
                 supplied in predicate_args and/or predicate_kwargs.
             predicate_args (list): (optional) See retry_predicate.
             predicate_kwargs (dict): (optional) See retry_predicate.
@@ -127,7 +128,7 @@ class AIOConnection:
             "none": lambda resp: False,  # never retry
             "simple": lambda resp: True,  # always retry up to tries/timeout
             # don't retry on 4xx
-            "no4xx": lambda resp: resp.status < 400 or resp.status >=500,
+            "no4xx": lambda resp: resp.status < 400 or resp.status >= 500,
             "custom": retry_predicate,
         }
         actual_predicate = retry_predicates[retry_type]
@@ -166,7 +167,7 @@ class AIOConnection:
 
     async def _request(self, method, url, params=None, body=None, headers=None):
         """Make an asynchronous HTTP request.
-        
+
         Args:
             See request().
         Returns:
