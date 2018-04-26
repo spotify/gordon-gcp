@@ -34,7 +34,7 @@ To use:
 """
 
 import datetime
-import functools
+from functools import partial
 import http.client.UNAUTHORIZED
 import json
 import logging
@@ -92,7 +92,7 @@ class AIOConnection:
             body (obj): (optional) A dictionary, bytes, or file-like
                 object to send in the body of the request.
             headers (dict): (optional) HTTP headers to send with the
-                request. Headers pass through to the request will
+                request. Headers passed through to the request will
                 include :attr:`DEFAULT_REQUEST_HEADERS`.
             retry_type (str): (optional) The type of retries to use: "none",
                 "simple", (retry up to tries/timeout), "no4xx" (don't retry
@@ -105,12 +105,13 @@ class AIOConnection:
                 this value.
             timeout (int): (optional) Total maximum seconds to keep trying the
                 request (None == unlimited).  The number of actual tries is subject to retry_type and tries as well as this value.
-            retry_predicate (callable): (optional) Ignored unless retry_type is
-                "custom".  Last argument must be the response from _request().
-                Must return True for "continue retrying (subject to tries and
-                timeout)" or False for "stop retrying".  If the function takes
-                any other arguments, their values must be supplied in
-                predicate_args and/or predicate_kwargs.
+            retry_predicate (callable): (optional) Function to call to decide
+                if we should keep trying the request.  Ignored unless
+                retry_type is "custom".  Must return True for "continue retrying
+                (subject to tries and timeout)" or False for "stop retrying".
+                Last argument must be the response from _request().  If the
+                function takes any other arguments, their values must be 
+                supplied in predicate_args and/or predicate_kwargs.
             predicate_args (list): (optional) See retry_predicate.
             predicate_kwargs (dict): (optional) See retry_predicate.
             extra_401_retry (bool): (optional) If True, run one more request
@@ -139,7 +140,8 @@ class AIOConnection:
         )
 
         resp = await backoff.on_predicate(
-            backoff.expo, max_tries=tries, max_time=timeout, predicate=predicate_partial, on_giveup=retry_giveup,
+            backoff.expo, max_tries=tries, max_time=timeout,
+            predicate=predicate_partial,
         )(self._request)(method, url, params, body, headers)
         # one extra try on a 401 to make sure we've refreshed the token
         if resp.status == HTTPStatus.UNAUTHORIZED and extra_401_retry:
@@ -148,7 +150,7 @@ class AIOConnection:
             logging.info(log_msg)
             resp = self._request(method, url, params, body, headers)
 
-        # avoid leaky abstractions and wrap http errors with our own
+        # avoid leaky abstractions and wrap HTTP errors with our own
         try:
             resp.raise_for_status()
         except aiohttp.ClientResponseError as e:
@@ -168,7 +170,7 @@ class AIOConnection:
         Args:
             See request().
         Returns:
-            (aiohttp.ClientResponse) response from the request.
+            (aiohttp.ClientResponse) Response from the request.
         """
         req_headers = headers or {}
         req_headers.update(_utils.DEFAULT_REQUEST_HEADERS)
@@ -212,7 +214,7 @@ class AIOConnection:
             predicate_kwargs (dict): (optional) See request().
             extra_401_retry (bool): (optional) See request().
         Returns:
-            response body returned by :func:`json_callback` function.
+            Response body returned by :func:`json_callback` function.
         """
         if not json_callback:
             json_callback = json.loads
