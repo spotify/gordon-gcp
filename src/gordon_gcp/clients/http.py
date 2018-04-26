@@ -19,10 +19,6 @@ Module to interact with Google APIs via asynchronous HTTP calls.
 product-specific API clients as it handles Google authentication and
 automatic refresh of tokens.
 
-.. todo::
-
-    Include that it also handles retries once implemented.
-
 To use:
 
 .. code-block:: python
@@ -39,7 +35,7 @@ To use:
 
 import datetime
 import functools
-import http.client
+import http.client.UNAUTHORIZED
 import json
 import logging
 
@@ -51,9 +47,6 @@ from gordon_gcp.clients import _utils
 
 
 __all__ = ('AIOConnection',)
-
-MAX_REFRESH_ATTEMPTS = 2
-REFRESH_STATUS_CODES = (http.client.UNAUTHORIZED,)
 
 
 class AIOConnection:
@@ -86,9 +79,9 @@ class AIOConnection:
             await self._auth_client.refresh_token()
 
     async def request(self, method, url, params=None, body=None, headers=None,
-                      retry_type: "none", retries=1, timeout=None,  # TODO
+                      retry_type="none", tries=1, timeout=None,
                       retry_predicate=None, predicate_args=None,
-                      predicate_kwargs=None):
+                      predicate_kwargs=None, extra_401_retry=True):
         """Wrapper for _request() that handles retries and backoffs.
 
         Args:
@@ -102,29 +95,36 @@ class AIOConnection:
                 request. Headers pass through to the request will
                 include :attr:`DEFAULT_REQUEST_HEADERS`.
             retry_type (str): (optional) The type of retries to use: "none",
-                "simple", (retry up to retries/timeout), "no4xx" (don't retry
-                on 4xx, otherwise up to retries/timeout), or "custom".  If
+                "simple", (retry up to tries/timeout), "no4xx" (don't retry
+                on 4xx, otherwise up to tries/timeout), or "custom".  If
                 "custom", uses the retry predicate specified in the other
-                parameters.
-            retries TODO
-            timeout TODO
+                parameters.  See also extra_401_retry.
+            tries (int): (optional) Total maximum number of times to try the
+                request, including the first (i.e. 1 == no retries).  The number
+                of actual tries is subject to retry_type and timeout as well as
+                this value.
+            timeout (int): (optional) Total maximum seconds to keep trying the
+                request (None == unlimited).  The number of actual tries is subject to retry_type and tries as well as this value.
             retry_predicate (callable): (optional) Ignored unless retry_type is
                 "custom".  Last argument must be the response from _request().
-                Must return True for "continue retrying (subject to retries and
+                Must return True for "continue retrying (subject to tries and
                 timeout)" or False for "stop retrying".  If the function takes
                 any other arguments, their values must be supplied in
                 predicate_args and/or predicate_kwargs.
             predicate_args (list): (optional) See retry_predicate.
             predicate_kwargs (dict): (optional) See retry_predicate.
+            extra_401_retry (bool): (optional) If True, run one more request
+                attempt on a 401 (unauthorized), regardless of the value of
+                retry_type.  This makes sure we've tried generating a new token.
         Returns:
             (str) HTTP response body.
         Raises:
             :exc:`.GCPHTTPError`: If a response code >=400 was received and
-                there are no more retries (or no retrying is specified).
+                there are no more tries (or no retrying is specified).
         """
         retry_predicates = {
             "none": lambda resp: False,  # never retry
-            "simple": lambda resp: True,  # always retry up to retries/timeout
+            "simple": lambda resp: True,  # always retry up to tries/timeout
             # don't retry on 4xx
             "no4xx": lambda resp: resp.status < 400 or resp.status >=500,
             "custom": retry_predicate,
@@ -138,46 +138,29 @@ class AIOConnection:
             actual_predicate, *predicate_args, **predicate_kwargs
         )
 
-        def retry_giveup(invoc_info):
-            """Once we're done, raise an exception if necessary.
-
-            Args:
-                invoc_info (dict): Info about the state of the retries; see
-                    https://github.com/litl/backoff
-                    In particular, contains "tries" (number of tries so far),
-                    elapsed (seconds so far) and "value" (response from the
-                    wrapped function).
-            Raises:
-                :exc:`.GCPHTTPError`: If a response code >=400 was received and
-                there are no more retries (or no retrying is specified).
-            """
-            # avoid leaky abstractions and wrap http errors with our own
-            try:
-                invoc_info.value.raise_for_status()
-            except aiohttp.ClientResponseError as e:
-                msg = f'Issue connecting to {invoc_info.value.url.host}: {e}'
-                logging.error(msg, exc_info=e)
-                raise exceptions.GCPHTTPError(msg)
-
         resp = await backoff.on_predicate(
-            backoff.expo, max_tries=retries, max_time=timeout, predicate=predicate_partial, on_giveup=retry_giveup,
+            backoff.expo, max_tries=tries, max_time=timeout, predicate=predicate_partial, on_giveup=retry_giveup,
         )(self._request)(method, url, params, body, headers)
+        # one extra try on a 401 to make sure we've refreshed the token
+        if resp.status == HTTPStatus.UNAUTHORIZED and extra_401_retry:
+            log_msg = ('Unauthorized. Attempting to refresh token and '
+                       'try again.')
+            logging.info(log_msg)
+            resp = self._request(method, url, params, body, headers)
+
+        # avoid leaky abstractions and wrap http errors with our own
+        try:
+            resp.raise_for_status()
+        except aiohttp.ClientResponseError as e:
+            msg = f'Issue connecting to {resp.url.host}: {e}'
+            logging.error(msg, exc_info=e)
+            raise exceptions.GCPHTTPError(msg)
         return await resp.text()
-    
-        # retry from 0 or 1?
-        # default retries/timeout??
-        # move 401 check
+
+        # TODO:
+        # import
         # logging.getLogger('backoff').addHandler(logging.StreamHandler())
         # logging.getLogger('backoff').setLevel(logging.INFO)
-
-        # Try to refresh token once if received a 401
-        if resp.status in REFRESH_STATUS_CODES:
-            log_msg = ('Unauthorized. Attempting to refresh token and '
-                        'try again.')
-            logging.info(log_msg)
-            # TODO retry            # TODO retry
-
-
 
     async def _request(self, method, url, params=None, body=None, headers=None):
         """Make an asynchronous HTTP request.
@@ -211,9 +194,10 @@ class AIOConnection:
             logging.debug(_utils.RESP_LOG_FMT.format(**log_kw))
             return resp
 
-    async def get_json(self, url, json_callback=None, retry_type: "none",
-                       retries=1, timeout=None, retry_predicate=None,  #TODO
-                       predicate_args=None, predicate_kwargs=None):
+    async def get_json(self, url, json_callback=None, retry_type="none",
+                       tries=1, timeout=None, retry_predicate=None,
+                       predicate_args=None, predicate_kwargs=None,
+                       extra_401_retry=True):
         """Get a URL and return its JSON response.
 
         Args:
@@ -221,15 +205,21 @@ class AIOConnection:
             json_callback (func): Custom JSON loader function. Defaults
                 to :meth:`json.loads`.
             retry_type (str): (optional) See request().
-            retries TODO
-            timeout TODO
+            tries (int): (optional) See request().
+            timeout (int): (optional) See request().
             retry_predicate (callable): (optional) See request().
             predicate_args (list): (optional) See request().
             predicate_kwargs (dict): (optional) See request().
+            extra_401_retry (bool): (optional) See request().
         Returns:
             response body returned by :func:`json_callback` function.
         """
         if not json_callback:
             json_callback = json.loads
-        response = await self.request(method='get', url=url, **kwargs)
+        response = await self.request(
+            method='get', url=url, retry_type=retry_type, tries=tries,
+            timeout=timeout, retry_predicate=retry_predicate,
+            predicate_args=predicate_args, predicate_kwargs=predicate_kwargs,
+            extra_401_retry=extra_401_retry,
+        )
         return json_callback(response)
