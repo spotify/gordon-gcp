@@ -15,18 +15,14 @@
 # limitations under the License.
 
 import asyncio
-import aiohttp
-import pytest  # NOQA
+import pytest
 from google.cloud import pubsub_v1
 from gordon import interfaces
 
 from gordon_gcp import exceptions
 from gordon_gcp.plugins import publisher
-from gordon_gcp.clients import auth, http
+from gordon_gcp.clients import http
 from gordon_gcp.plugins import event_consumer
-import os
-
-os.environ['PYTHONASYNCIODEBUG'] = '1'
 
 
 @pytest.fixture
@@ -90,6 +86,7 @@ def event_msg_data():
         ]
     }
 
+
 @pytest.fixture
 def event_msg_data_with_invalid_zone():
     return {
@@ -123,27 +120,91 @@ def event_msg_data_with_invalid_action():
 
 
 @pytest.fixture
+def event_msg_data_delete_unexisting_record():
+    return {
+        'action': 'deletions',
+        'resourceName': 'projects/.../instances/an-instance-name-b45c',
+        'resourceRecords': [
+            {
+                'name': 'service5.nurit.com.',
+                'rrdatas': ['127.10.20.8'],
+                'type': 'A',
+                'ttl': 3600
+            }
+        ]
+    }
+
+
+@pytest.fixture
+def event_msg_data_bad_rrdata():
+    return {
+        'action': 'additions',
+        'resourceName': 'projects/.../instances/an-instance-name-b45c',
+        'resourceRecords': [
+            {
+                'name': 'service5.nurit.com.',
+                'rrdatas': ['127.10.20.899'],
+                'type': 'A',
+                'ttl': 3600
+            }
+        ]
+    }
+
+
+@pytest.fixture
 def event_message(mocker, event_msg_data, pubsub_message):
     event_msg = mocker.MagicMock(event_consumer.GEventMessage)
     event_msg.msg_id = pubsub_message.message_id
     event_msg.data = event_msg_data
-    event_message.phase = ''
+    event_msg.phase = ''
     return event_msg
 
 
-@pytest.mark.parametrize('provide_session', [True, False])
-def test_implements_interface(provide_session, mocker, config):
+@pytest.fixture
+def event_message_delete_unexisting_record(
+        event_message,
+        event_msg_data_delete_unexisting_record):
+    event_message.data = event_msg_data_delete_unexisting_record
+    return event_message
+
+
+@pytest.fixture
+def api_response_on_request_changes():
+    return """{
+                     "kind": "dns#change",
+                     "additions": [
+                      {
+                       "kind": "dns#resourceRecordSet",
+                       "name": "service3.nurit.com.",
+                       "type": "A",
+                       "ttl": 3600,
+                       "rrdatas": [
+                        "127.10.20.2"
+                       ]
+                      }
+                     ],
+                     "startTime": "2018-04-26T15:22:36.941Z",
+                     "id": "6",
+                     "status": "pending"
+                    }"""
+
+
+@pytest.fixture
+def api_response_json_on_get_json():
+    return {'kind': 'dns#change',
+            'additions': [{'kind': 'dns#resourceRecordSet',
+                           'name': 'service3.nurit.com.',
+                           'type': 'A',
+                           'ttl': 3600,
+                           'rrdatas': ['127.10.20.2']}],
+            'startTime': '2018-04-26T15:02:17.541Z',
+            'id': '4',
+            'status': 'done'}
+
+
+def test_implements_interface(config, auth_client):
     """GDNSPublisher implements IPublisherClient"""
-
-    session = None
-    if provide_session:
-        session = aiohttp.ClientSession()
-
-    auth_client = mocker.Mock(auth.GAuthClient)
-    auth_client._session = aiohttp.ClientSession()
-    creds = mocker.Mock()
-    auth_client.creds = creds
-    client = http.AIOConnection(auth_client=auth_client, session=session)
+    client = http.AIOConnection(auth_client=auth_client)
 
     success, error = asyncio.Queue(), asyncio.Queue()
     client = publisher.GDNSPublisher(config, success, error, client)
@@ -156,74 +217,157 @@ def test_implements_interface(provide_session, mocker, config):
     assert 'publish' == client.phase
 
 
-def test_find_zone_failed(
+@pytest.mark.asyncio
+async def test_find_zone_failed(
         publisher_instance, event_message,
-        event_msg_data_with_invalid_zone):
+        event_msg_data_with_invalid_zone, caplog):
+    """Test error is raised a valid zone is not found in the record"""
     event_message.data = event_msg_data_with_invalid_zone
 
     record = event_message.data['resourceRecords'][0]
 
-    with pytest.raises(exceptions.GCPGordonError) as e:
-        publisher_instance.publish_changes(event_message)
+    await publisher_instance.publish_changes(event_message)
 
-    expected_msg = f'Error trying to find zone ' \
+    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
+                   f'occurred when handling message: ' \
+                   f'Error trying to find zone ' \
                    f'in valid_zone for record: {record}'
 
-    assert e.match(expected_msg)
+    actual_msg = caplog.records[1].msg
+
+    assert expected_msg == actual_msg
 
 
-def test_invalid_action(
+@pytest.mark.asyncio
+async def test_invalid_action(
         publisher_instance, event_message,
-        event_msg_data_with_invalid_action):
+        event_msg_data_with_invalid_action, caplog):
+    """Test error is raised when the action is invalid in the record"""
     event_message.data = event_msg_data_with_invalid_action
 
     action = event_message.data['action']
 
-    with pytest.raises(exceptions.GCPGordonError) as e:
-        publisher_instance.publish_changes(event_message)
+    await publisher_instance.publish_changes(event_message)
 
-    expected_msg = f'Error trying to format changes, ' \
+    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
+                   f'occurred when handling message: ' \
+                   f'Error trying to format changes, ' \
                    f'got an invalid action: {action}'
 
-    assert e.match(expected_msg)
+    actual_msg = caplog.records[1].msg
+
+    assert expected_msg == actual_msg
 
 
 @pytest.mark.asyncio
-async def test_publish_changes_failed_on_post_adding_existing_record(
-        event_message, mock_http_client, config, caplog):
-    expected_changes = {'kind': 'dns#change',
-                        'additions': [{'kind': 'dns#resourceRecordSet',
-                                       'name': 'service3.nurit.com.',
-                                       'type': 'A', 'ttl': 3600,
-                                       'rrdatas': ['127.10.20.2']}]}
+async def test_failed_on_post_adding_existing_record(
+        publisher_instance, event_message, caplog):
+    """Test error is raised and the message is dropped
+        when trying to add an existing record"""
+    error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
 
-    expected_error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
+    publisher_instance.http_client._request_post_mock.side_effect =\
+        exceptions.GCPHTTPError(error)
 
-    mock_http_client._request_post_mock.side_effect = exceptions.GCPHTTPError(expected_error)
+    await publisher_instance.publish_changes(event_message)
 
-    success, error = asyncio.Queue(), asyncio.Queue()
-    pb = publisher.GDNSPublisher(config, success, error, mock_http_client)
-
-    await pb.publish_changes(event_message)
-    failed_msg = caplog.records[1].msg
-    print(failed_msg)
-
-    # expected_msg = "[msg-1234]: Encountered a retryable error: " \
-    #                "Issue connecting to www.googleapis.com: 409, message='Conflict'"
-    # assert expected_msg == failed_msg
+    actual_msg = caplog.records[1].msg
+    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
+                   f'occurred when handling message: {error}'
+    assert expected_msg == actual_msg
 
 
 @pytest.mark.asyncio
-async def test_publish_changes_failed_on_watch_status():
-    pass
+async def test_failed_on_post_delete_unexisting_record(
+        publisher_instance,
+        event_message_delete_unexisting_record, caplog):
+    """Test error is raised and the message is dropped
+        when trying to delete un existing record"""
+    error = "Issue connecting to www.googleapis.com: 404, message='Not Found'"
+
+    publisher_instance.http_client._request_post_mock.side_effect = \
+        exceptions.GCPHTTPError(error)
+
+    await publisher_instance.publish_changes(event_message_delete_unexisting_record)
+
+    actual_msg = caplog.records[1].msg
+    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
+                   f'occurred when handling message: {error}'
+    assert expected_msg == actual_msg
 
 
 @pytest.mark.asyncio
-async def test_event_msg_placed_into_error_channel():
-    pass
+async def test_failed_on_post_adding_bad_rrdata(
+        publisher_instance, event_message,
+        caplog, event_msg_data_bad_rrdata):
+    """Test error is raised and the message is dropped
+            when trying to add record with bad rrdata"""
+    event_message.data = event_msg_data_bad_rrdata
+
+    error = "Issue connecting to www.googleapis.com: 400, message='Bad Request'"
+
+    publisher_instance.http_client._request_post_mock.side_effect =\
+        exceptions.GCPHTTPError(error)
+
+    await publisher_instance.publish_changes(event_message)
+
+    actual_msg = caplog.records[1].msg
+    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
+                   f'occurred when handling message: {error}'
+    assert expected_msg == actual_msg
+
+    msg = await publisher_instance.error_channel.get()
+    assert msg == event_message
 
 
 @pytest.mark.asyncio
-async def test_event_msg_placed_into_success_channel():
-    pass
+async def test_failed_on_watch_status(
+    mocker, publisher_instance, event_message,
+        caplog, get_mock_coro,
+        api_response_on_request_changes,
+        api_response_json_on_get_json):
+    """Test error is raised and messgae placed into error channel
+        when timeout is reached
+        on waiting for DNS changes to be done"""
+    api_response_json_on_get_json['status'] = 'pending'
 
+    publisher_instance.timeout = 2
+
+    mock, _coroutine = get_mock_coro()
+    mocker.patch('asyncio.sleep', _coroutine)
+
+    publisher_instance.http_client._request_post_mock.return_value = \
+        api_response_on_request_changes
+    publisher_instance.http_client._get_json_mock.return_value =\
+        api_response_json_on_get_json
+
+    await publisher_instance.publish_changes(event_message)
+
+    actual_msg = caplog.records[1].msg
+
+    expected_msg = '[msg-1234]: RETRYING: ' \
+                   'Exception occurred when handling message: ' \
+                   'Timed out waiting for DNS changes to be done'
+    assert expected_msg == actual_msg
+
+    # test event msg placed into error channel
+    msg = await publisher_instance.error_channel.get()
+    assert msg == event_message
+
+
+@pytest.mark.asyncio
+async def test_event_msg_placed_into_success_channel(
+        publisher_instance, event_message,
+        api_response_on_request_changes,
+        api_response_json_on_get_json):
+    """Test message placed into success channel"""
+    publisher_instance.http_client._request_post_mock.return_value = \
+        api_response_on_request_changes
+    publisher_instance.http_client._get_json_mock.return_value = \
+        api_response_json_on_get_json
+
+    await publisher_instance.publish_changes(event_message)
+
+    # test event msg placed into success channel
+    msg = await publisher_instance.success_channel.get()
+    assert msg == event_message

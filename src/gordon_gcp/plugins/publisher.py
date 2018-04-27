@@ -40,9 +40,8 @@ from gordon_gcp.clients import http, auth
 
 __all__ = ('GDNSPublisher',)
 
-
 HOST = 'https://www.googleapis.com'
-V1 = '/dns/v1/projects/{project}/managedZones/{managedZone}/changes'
+BASE_CHANGES_ENDPOINT = '/dns/{version}/projects/{project}/managedZones/{managedZone}/changes'
 
 
 @zope.interface.implementer(interfaces.IPublisherClient)
@@ -67,8 +66,14 @@ class GDNSPublisher:
         self.error_channel = error_channel
         self.http_client = http_client
         self.timeout = config['timeout']
-        self.valid_zones = config['valid_zones']
+        self.managed_zone = config['managed_zone']
+        self.dns_zone = config['dns_zone']
         self.project = config['project']
+        _api_version = config.get('version', 'v1')
+        self.base_url = HOST + \
+                        BASE_CHANGES_ENDPOINT.format(version=_api_version,
+                                                     project=self.project,
+                                                     managedZone=self.managed_zone)
         self._logger = logging.getLogger('')
 
     # TODO: This will be eventually moved to GEventMessage
@@ -88,25 +93,27 @@ class GDNSPublisher:
         Returns:
             record data extracted from the event message
         """
-        data = event_msg.data['resourceRecords'][0]
+        changes = []
+        resource_records = event_msg.data['resourceRecords']
 
-        return {
-            'kind': 'dns#resourceRecordSet',
-            'name': data['name'],
-            'type': data['type'],
-            'ttl': data.get('ttl', self.config.get('default_ttl', 300)),
-            'rrdatas': data['rrdatas']
-        }
+        for resource_record in resource_records:
+            changes.append({
+                'kind': 'dns#resourceRecordSet',
+                'name': resource_record['name'],
+                'type': resource_record['type'],
+                'ttl': resource_record.get('ttl', self.config.get('default_ttl', 300)),
+                'rrdatas': resource_record['rrdatas']
+            })
 
-    def _format_changes(self, event_msg, msg_logger):
+        return changes
+
+    def _format_changes(self, event_msg):
         """Return dict containing the changes
             to be made to the zone.
 
         Args:
             event_msg (event_consumer.GEventMessage):
                 contains the change action to make
-            msg_logger (_utils.GEventMessageLogger):
-                event message logger class
 
         Returns:
             The changes to post to google API.
@@ -119,22 +126,20 @@ class GDNSPublisher:
 
         action = event_msg.data['action']
         if action == 'additions':
-            ret['additions'] = [changes]
+            ret['additions'] = changes
         elif action == 'deletions':
-            ret['deletions'] = [changes]
+            ret['deletions'] = changes
         else:
             msg = f'Error trying to format changes, ' \
                   f'got an invalid action: {action}'
-            msg_logger.error(msg)
-            raise exceptions.GCPGordonError(msg)
+            raise exceptions.GCPDropMessageError(msg)
 
         return ret
 
-    async def _watch_status(self, zone, changes_id):
+    async def _watch_status(self, changes_id):
         """Check google API if the changes are done.
 
         Args:
-            zone (str): check the status for the zone
             changes_id (int): check the status for the changes_id
 
         Returns:
@@ -142,8 +147,7 @@ class GDNSPublisher:
              or raise error if timeout passed and
              we stiLl didn't get status "done" from the API
         """
-        url = HOST + V1.format(project=self.project, managedZone=zone)
-        url = f'{url}/{changes_id}'
+        url = f'{self.base_url}/{changes_id}'
 
         timeout = datetime.timedelta(seconds=self.timeout)
         start = datetime.datetime.now()
@@ -160,43 +164,39 @@ class GDNSPublisher:
         msg = 'Timed out waiting for DNS changes to be done'
         raise exceptions.GCPRetryMessageError(msg)
 
-    async def _publish_changes(self, zone, changes):
+    async def _publish_changes(self, changes):
         """Post changes to the google API and sample it to
             check if the changes are done.
 
         Args:
-            zone (str): the zone to make changes to
             changes (dict): the changes to make
 
         Returns:
             boolean if the changes are done.
         """
-        url = HOST + V1.format(project=self.project, managedZone=zone)
-
         try:
-            resp = await self.http_client.request('post', url, json=changes)
+            resp = await self.http_client.request('post', self.base_url,
+                                                  json=changes)
         except Exception as e:
             e_start = 'Issue connecting to www.googleapis.com: '
             status_code = int(e.args[0].split(e_start)[1].split(',')[0])
-            if 400 < status_code < 500:
-                raise exceptions.GCPDropMessageError()
+            if 400 <= status_code < 500:
+                raise exceptions.GCPDropMessageError(e)
             else:
                 raise e
 
         resp_dict = json.loads(resp)
 
         # TODO: create another task to measure propagation time
-        return await self._watch_status(zone, resp_dict['id'])
+        return await self._watch_status(resp_dict['id'])
 
-    def _find_zone(self, event_msg, msg_logger):
+    def _find_zone(self, event_msg):
         """Find the zone to make changes
             to from the record name, according to the valid zones.
 
         Args:
             event_msg (event_consumer.GEventMessage):
                 contains the record to find the zone
-            msg_logger (_utils.GEventMessageLogger):
-                event message logger class
 
         Returns:
             The zone to make changes to or
@@ -205,18 +205,14 @@ class GDNSPublisher:
         record = event_msg.data['resourceRecords'][0]
         record_name = record['name']
 
-        for zone in self.valid_zones:
-
-            zone_with_dot = zone.replace('-', '.') + '.'
-            if record_name.endswith(zone_with_dot):
-                return zone
+        if record_name.endswith(self.dns_zone):
+            return self.managed_zone
 
         msg = f'Error trying to find zone' \
               f' in valid_zone for record: {record}'
-        msg_logger.error(msg)
-        raise exceptions.GCPGordonError(msg)
+        raise exceptions.GCPDropMessageError(msg)
 
-    @_utils.handle_errors
+    @_utils.route_result
     async def publish_changes(self, event_msg):
         """Publish changes extracted from the event message,
             place the msg into the appropriate channel.
@@ -224,24 +220,19 @@ class GDNSPublisher:
         Args:
             event_msg (event_consumer.GEventMessage):
                 contains the changes to publish
-
         """
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': event_msg.msg_id})
         msg_logger.info('Publisher received new message')
 
-        zone = self._find_zone(event_msg, msg_logger)
+        self._find_zone(event_msg)
 
-        changes = self._format_changes(event_msg, msg_logger)
+        changes_to_publish = self._format_changes(event_msg)
 
-        await self._publish_changes(zone, changes)
-
-        await self.update_phase(event_msg)
-        await self.success_channel.put(event_msg)
+        await self._publish_changes(changes_to_publish)
 
 
 class PubSubMessage(object):
-
     def __init__(self):
         self.message_id = 123
 
@@ -254,7 +245,11 @@ if __name__ == '__main__':
     auth_client = auth.GAuthClient(**kwargs)
 
     http_client = http.AIOConnection(auth_client=auth_client)
-    config = {'timeout': 90, 'valid_zones': ['nurit-com'], 'project': 'pr-tower-hackweek'}
+    config = {'timeout': 90,
+              'managed_zone': 'nurit-com',
+              'project': 'pr-tower-hackweek',
+              'api_version': 'v1',
+              'dns_zone': 'nurit.com.'}
     success, error = asyncio.Queue(), asyncio.Queue()
     publisher = GDNSPublisher(config, success, error, http_client)
 
@@ -265,18 +260,17 @@ if __name__ == '__main__':
         'resourceName': 'projects/.../instances/an-instance-name-b45c',
         'resourceRecords': [
             {
-                'name': 'service3.nurit.com.',
-                'rrdatas': ['127.10.20.2'],
+                'name': 'service.nurit.com.',
+                'rrdatas': ['127.10.20.22'],
                 'type': 'A',
                 'ttl': 3600
             },
             {
-                'name': 'service4.nurit.com.',
-                'rrdatas': ['127.10.20.5'],
+                'name': 'service50.nurit.com.',
+                'rrdatas': ['127.10.20.1000'],
                 'type': 'A',
                 'ttl': 3600
             }
-
         ]
     }
     pubsub_msg = PubSubMessage()
