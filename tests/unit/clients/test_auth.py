@@ -16,12 +16,15 @@
 
 import asyncio
 import datetime
+import json
 import os
 
 import aiohttp
 import pytest
 from aioresponses import aioresponses
+from google import auth as gauth
 from google.oauth2 import _client as oauth_client
+from google.oauth2 import credentials
 from google.oauth2 import service_account
 
 from gordon_gcp import exceptions
@@ -36,15 +39,57 @@ async def session():
 
 
 @pytest.fixture
-def mock_service_acct(mocker, monkeypatch):
+def mock_oauth2_credentials(mocker, monkeypatch, fake_keyfile_data):
+    mock_creds = mocker.MagicMock(gauth)
+
+    sa_creds = mocker.MagicMock(credentials.Credentials)
+    sa_creds._token_uri = fake_keyfile_data['token_uri']
+    sa_creds._refresh_token = '_refresh_token'
+    sa_creds._client_id = '_client_id'
+    sa_creds._client_secret = '_client_secret'
+
+    mock_creds.default.return_value = sa_creds, ''
+
+    patch = 'gordon_gcp.clients.auth.gauth'
+    monkeypatch.setattr(patch, mock_creds)
+    return mock_creds
+
+
+@pytest.fixture
+def mock_service_acct(mocker, monkeypatch, fake_keyfile_data):
     mock_creds = mocker.MagicMock(service_account.Credentials)
     sa_creds = mocker.MagicMock(service_account.Credentials)
     sa_creds._make_authorization_grant_assertion.return_value = 'deadb33f=='
+    sa_creds._token_uri = fake_keyfile_data['token_uri']
     mock_creds.from_service_account_info.return_value = sa_creds
 
     patch = 'gordon_gcp.clients.auth.service_account.Credentials'
     monkeypatch.setattr(patch, mock_creds)
     return mock_creds
+
+
+@pytest.fixture
+def app_default_cred_file_content():
+    return json.dumps({
+      "type": "service_account",
+      "project_id": "pr-tower",
+      "private_key_id": "fdsfsdf",
+      "private_key": "-----BEGIN PRIVATE KEY-----",
+      "client_email": "sd-compute@developer.gserviceaccount.com",
+      "client_id": "fds",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://accounts.google.com/o/oauth2/token",
+      "auth_provider_x509_cert_url": "https://www.google.com",
+      "client_x509_cert_url": "https://www.googleapis.com"
+    })
+
+
+@pytest.fixture
+def payload_resp_refresh_token():
+    return {
+        'access_token': 'c0ffe3',
+        'expires_in': 3600,  # seconds = 1hr
+    }
 
 
 #####
@@ -139,6 +184,20 @@ def test_auth_client_raises_not_found(tmpdir, caplog):
     assert 1 == len(caplog.records)
 
 
+def test_auth_client_initialize_app_default_cred(
+        monkeypatch, app_default_cred_file_content,
+        tmpdir, mock_oauth2_credentials):
+    """Test credentials is initialize
+        using application default credentials"""
+    p = tmpdir.mkdir("adc").join("adc.json")
+    p.write(app_default_cred_file_content)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS",
+                       p.dirpath() + "/adc.json")
+    client = auth.GAuthClient()
+    assert isinstance(client.creds, credentials.Credentials)
+    assert not isinstance(client.creds, service_account.Credentials)
+
+
 #####
 # Tests & fixtures for access token handling
 #####
@@ -156,20 +215,40 @@ async def client(fake_keyfile, mock_service_acct, session, event_loop):
     await session.close()
 
 
+@pytest.fixture
+async def client_with_app_default_cred(session, mock_oauth2_credentials):
+    yield auth.GAuthClient(session=session)
+    await session.close()
+
+
 @pytest.mark.asyncio
 async def test_refresh_token(client, fake_keyfile_data, mock_parse_expiry,
-                             caplog):
+                             caplog, payload_resp_refresh_token):
     """Successfully refresh access token."""
     url = fake_keyfile_data['token_uri']
     token = 'c0ffe3'
-    payload = {
-        'access_token': token,
-        'expires_in': 3600,  # seconds = 1hr
-    }
     with aioresponses() as mocked:
-        mocked.post(url, status=200, payload=payload)
+        mocked.post(url, status=200,
+                    payload=payload_resp_refresh_token)
         await client.refresh_token()
     assert token == client.token
+    assert 2 == len(caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_with_app_default_cred(client_with_app_default_cred,
+                                                   fake_keyfile_data,
+                                                   mock_parse_expiry, caplog,
+                                                   payload_resp_refresh_token):
+    """Successfully refresh access token with
+        credentials from application default credentials """
+    url = fake_keyfile_data['token_uri']
+    token = 'c0ffe3'
+    with aioresponses() as mocked:
+        mocked.post(url, status=200,
+                    payload=payload_resp_refresh_token)
+        await client_with_app_default_cred.refresh_token()
+    assert token == client_with_app_default_cred.token
     assert 2 == len(caplog.records)
 
 

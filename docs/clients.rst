@@ -48,3 +48,5 @@ GCP Auth Client
 .. automodule:: gordon_gcp.clients.auth
 .. autoclass:: gordon_gcp.GAuthClient
     :members:
+
+.. autofunction:: google.auth._default.default
