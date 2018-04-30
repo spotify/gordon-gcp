@@ -126,9 +126,10 @@ class AIOConnection:
         """
         retry_predicates = {
             "none": lambda resp: False,  # never retry
-            "simple": lambda resp: True,  # always retry up to tries/timeout
+            # retry until success, subject to tries/timeout
+            "simple": lambda resp: resp.status >= 400,
             # don't retry on 4xx
-            "no4xx": lambda resp: resp.status < 400 or resp.status >= 500,
+            "no4xx": lambda resp: resp.status >= 500,
             "custom": retry_predicate,
         }
         actual_predicate = retry_predicates[retry_type]
@@ -140,15 +141,28 @@ class AIOConnection:
             actual_predicate, *predicate_args, **predicate_kwargs
         )
 
+        def backoff_logger(details):
+            """See https://github.com/litl/backoff#event-handlers."""
+            logging.info(_utils.REQ_LOG_FMT.format(method, url) +
+                         " -> Failed predicate, trying again "
+                         f"({details.tries} tries so far).")
+
+        def giveup_logger(details):
+            """See https://github.com/litl/backoff#event-handlers."""
+            logging.info(_utils.REQ_LOG_FMT.format(method, url) +
+                         " -> Failed predicate, but no more retries "
+                         f"({details.tries} tries so far).")
+
         resp = await backoff.on_predicate(
             backoff.expo, max_tries=tries, max_time=timeout,
-            predicate=predicate_partial,
+            predicate=predicate_partial, on_backoff=backoff_logger,
+            on_giveup=giveup_logger,
         )(self._request)(method, url, params, body, headers)
         # one extra try on a 401 to make sure we've refreshed the token
         if resp.status == HTTPStatus.UNAUTHORIZED and extra_401_retry:
-            log_msg = ('Unauthorized. Attempting to refresh token and '
-                       'try again.')
-            logging.info(log_msg)
+            logging.info(_utils.REQ_LOG_FMT.format(method, url) +
+                         " -> Unauthorized.  Trying one more time with new "
+                         "token.")
             resp = self._request(method, url, params, body, headers)
 
         # avoid leaky abstractions and wrap HTTP errors with our own
@@ -159,11 +173,6 @@ class AIOConnection:
             logging.error(msg, exc_info=e)
             raise exceptions.GCPHTTPError(msg)
         return await resp.text()
-
-        # TODO:
-        # import
-        # logging.getLogger('backoff').addHandler(logging.StreamHandler())
-        # logging.getLogger('backoff').setLevel(logging.INFO)
 
     async def _request(self, method, url, params=None, body=None, headers=None):
         """Make an asynchronous HTTP request.
