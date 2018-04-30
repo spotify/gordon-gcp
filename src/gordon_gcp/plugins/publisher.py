@@ -83,58 +83,40 @@ class GDNSPublisher:
         msg = f'Updated phase from "{old_phase}" to "{event_msg.phase}".'
         event_msg.append_to_history(msg, self.phase)
 
-    def _format_change(self, event_msg):
-        """Returns record data from the event message to change.
+    def _format_change(self, resource_record):
+        """Returns ResourceRecordSets to change.
 
         Args:
-            event_msg (event_consumer.GEventMessage):
-                contains the record data to add\delete
-
+            resource_record (dict): dict contains record data
         Returns:
-            record data extracted from the event message
+            ResourceRecordSets to pass
+                to the API to make changes.
         """
-        changes = []
-        resource_records = event_msg.data['resourceRecords']
-
-        for resource_record in resource_records:
-            changes.append({
+        return {
                 'kind': 'dns#resourceRecordSet',
                 'name': resource_record['name'],
                 'type': resource_record['type'],
                 'ttl': resource_record.get('ttl', self.config.get('default_ttl', 300)),
                 'rrdatas': resource_record['rrdatas']
-            })
+        }
 
-        return changes
-
-    def _format_changes(self, event_msg):
+    def _format_changes(self, action, resource_record):
         """Return dict containing the changes
-            to be made to the zone.
+            to be made.
 
         Args:
-            event_msg (event_consumer.GEventMessage):
-                contains the change action to make
+            action (str): change action to add
+                to record changes dict
 
         Returns:
             The changes to post to google API.
         """
-        changes = self._format_change(event_msg)
+        record_changes = self._format_change(resource_record)
 
-        ret = {
-            'kind': 'dns#change'
+        return {
+            'kind': 'dns#change',
+            action: [record_changes]
         }
-
-        action = event_msg.data['action']
-        if action == 'additions':
-            ret['additions'] = changes
-        elif action == 'deletions':
-            ret['deletions'] = changes
-        else:
-            msg = f'Error trying to format changes, ' \
-                  f'got an invalid action: {action}'
-            raise exceptions.GCPDropMessageError(msg)
-
-        return ret
 
     async def _watch_status(self, changes_id):
         """Check google API if the changes are done.
@@ -181,7 +163,8 @@ class GDNSPublisher:
             e_start = 'Issue connecting to www.googleapis.com: '
             status_code = int(e.args[0].split(e_start)[1].split(',')[0])
             if 400 <= status_code < 500:
-                raise exceptions.GCPDropMessageError(e)
+                msg = f'Error: {e} for changes: {changes}'
+                raise exceptions.GCPDropMessageError(msg)
             else:
                 raise e
 
@@ -190,27 +173,26 @@ class GDNSPublisher:
         # TODO: create another task to measure propagation time
         return await self._watch_status(resp_dict['id'])
 
-    def _find_zone(self, event_msg):
-        """Find the zone to make changes
-            to from the record name, according to the valid zones.
+    def _assert_zone_for_records(self, records_to_change):
+        """Assert zone for all given records.
 
         Args:
-            event_msg (event_consumer.GEventMessage):
-                contains the record to find the zone
+            records_to_change (list):
+                records to assert their dns zone
 
         Returns:
-            The zone to make changes to or
-                raise if zone not found.
+            Raise GCPDropMessageError if assertion
+             failed for at least on record.
         """
-        record = event_msg.data['resourceRecords'][0]
-        record_name = record['name']
+        for record in records_to_change:
+            record_name = record['name']
 
-        if record_name.endswith(self.dns_zone):
-            return self.managed_zone
-
-        msg = f'Error trying to find zone' \
-              f' in valid_zone for record: {record}'
-        raise exceptions.GCPDropMessageError(msg)
+            if record_name.endswith(self.dns_zone):
+                continue
+            else:
+                msg = f'Error when asserting zone' \
+                      f' for record: {record}'
+                raise exceptions.GCPDropMessageError(msg)
 
     @_utils.route_result
     async def publish_changes(self, event_msg):
@@ -225,11 +207,37 @@ class GDNSPublisher:
             self._logger, {'msg_id': event_msg.msg_id})
         msg_logger.info('Publisher received new message')
 
-        self._find_zone(event_msg)
+        records_to_change = event_msg.data['resourceRecords']
 
-        changes_to_publish = self._format_changes(event_msg)
+        self._assert_zone_for_records(records_to_change)
 
-        await self._publish_changes(changes_to_publish)
+        action = self._get_change_action(event_msg)
+
+        for resource_record in records_to_change:
+            changes_to_publish = self._format_changes(action,
+                                                      resource_record)
+
+            await self._publish_changes(changes_to_publish)
+
+    def _get_change_action(self, event_msg):
+        """Return action extracted from event message,
+            or raise if action is not valid.
+
+        Args:
+            event_msg: message to extract action
+
+        Returns:
+            Return action extracted from event message,
+            or raise if action is not valid.
+        """
+        action = event_msg.data['action']
+
+        if action == 'additions' or action == 'deletions':
+            return action
+        else:
+            msg = f'Error trying to format changes, ' \
+                  f'got an invalid action: {action}'
+            raise exceptions.GCPDropMessageError(msg)
 
 
 class PubSubMessage(object):

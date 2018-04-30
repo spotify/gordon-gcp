@@ -27,10 +27,11 @@ from gordon_gcp.plugins import event_consumer
 
 @pytest.fixture
 def config():
-    return {
-        'timeout': 90,
-        'valid_zones': ['nurit-com'],
-        'project': 'pr-tower-hackweek'
+    return {'timeout': 90,
+            'managed_zone': 'nurit-com',
+            'project': 'pr-tower-hackweek',
+            'api_version': 'v1',
+            'dns_zone': 'nurit.com.'
     }
 
 
@@ -230,8 +231,8 @@ async def test_find_zone_failed(
 
     expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
                    f'occurred when handling message: ' \
-                   f'Error trying to find zone ' \
-                   f'in valid_zone for record: {record}'
+                   f'Error when asserting zone' \
+                   f' for record: {record}.'
 
     actual_msg = caplog.records[1].msg
 
@@ -252,7 +253,7 @@ async def test_invalid_action(
     expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
                    f'occurred when handling message: ' \
                    f'Error trying to format changes, ' \
-                   f'got an invalid action: {action}'
+                   f'got an invalid action: {action}.'
 
     actual_msg = caplog.records[1].msg
 
@@ -265,6 +266,13 @@ async def test_failed_on_post_adding_existing_record(
     """Test error is raised and the message is dropped
         when trying to add an existing record"""
     error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
+    changes = {'kind': 'dns#change',
+               'additions':
+                   [{'kind': 'dns#resourceRecordSet',
+                     'name': 'service3.nurit.com.',
+                     'type': 'A', 'ttl': 3600,
+                     'rrdatas': ['127.10.20.2']}]
+    }
 
     publisher_instance.http_client._request_post_mock.side_effect =\
         exceptions.GCPHTTPError(error)
@@ -273,7 +281,8 @@ async def test_failed_on_post_adding_existing_record(
 
     actual_msg = caplog.records[1].msg
     expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: {error}'
+                   f'occurred when handling message: ' \
+                   f'Error: {error} for changes: {changes}.'
     assert expected_msg == actual_msg
 
 
@@ -284,7 +293,13 @@ async def test_failed_on_post_delete_unexisting_record(
     """Test error is raised and the message is dropped
         when trying to delete un existing record"""
     error = "Issue connecting to www.googleapis.com: 404, message='Not Found'"
-
+    changes = {'kind': 'dns#change',
+               'deletions':
+                   [{'kind': 'dns#resourceRecordSet',
+                     'name': 'service5.nurit.com.',
+                     'type': 'A', 'ttl': 3600,
+                     'rrdatas': ['127.10.20.8']}]
+               }
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
 
@@ -292,7 +307,8 @@ async def test_failed_on_post_delete_unexisting_record(
 
     actual_msg = caplog.records[1].msg
     expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: {error}'
+                   f'occurred when handling message: ' \
+                   f'Error: {error} for changes: {changes}.'
     assert expected_msg == actual_msg
 
 
@@ -305,7 +321,13 @@ async def test_failed_on_post_adding_bad_rrdata(
     event_message.data = event_msg_data_bad_rrdata
 
     error = "Issue connecting to www.googleapis.com: 400, message='Bad Request'"
-
+    changes = {'kind': 'dns#change',
+               'additions':
+                   [{'kind': 'dns#resourceRecordSet',
+                     'name': 'service5.nurit.com.',
+                     'type': 'A', 'ttl': 3600,
+                     'rrdatas': ['127.10.20.899']}]
+               }
     publisher_instance.http_client._request_post_mock.side_effect =\
         exceptions.GCPHTTPError(error)
 
@@ -313,7 +335,8 @@ async def test_failed_on_post_adding_bad_rrdata(
 
     actual_msg = caplog.records[1].msg
     expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: {error}'
+                   f'occurred when handling message: ' \
+                   f'Error: {error} for changes: {changes}.'
     assert expected_msg == actual_msg
 
     msg = await publisher_instance.error_channel.get()
@@ -347,7 +370,7 @@ async def test_failed_on_watch_status(
 
     expected_msg = '[msg-1234]: RETRYING: ' \
                    'Exception occurred when handling message: ' \
-                   'Timed out waiting for DNS changes to be done'
+                   'Timed out waiting for DNS changes to be done.'
     assert expected_msg == actual_msg
 
     # test event msg placed into error channel
