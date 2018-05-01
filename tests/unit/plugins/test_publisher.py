@@ -153,6 +153,20 @@ def event_msg_data_bad_rrdata():
 
 
 @pytest.fixture
+def event_msg_data_updating_rec():
+    return {'action': 'additions',
+            'resourceName': 'projects/.../instances/an-instance-name-b45c',
+            'resourceRecords': [{"kind": "dns#resourceRecordSet",
+                                 "name": "service.nurit.com.",
+                                 "type": "A",
+                                 "ttl": 3600,
+                                 "rrdatas": [
+                                     "127.10.20.23"
+                                 ]
+                                 }]}
+
+
+@pytest.fixture
 def event_message(mocker, event_msg_data, pubsub_message):
     event_msg = mocker.MagicMock(event_consumer.GEventMessage)
     event_msg.msg_id = pubsub_message.message_id
@@ -320,12 +334,15 @@ async def test_invalid_action(
 @pytest.mark.asyncio
 async def test_updating_existing_record(
         publisher_instance, event_message,
+        event_msg_data_updating_rec,
         caplog, resp_get_json_rrsets,
         resp_post_updating_record,
         resp_watch_status_update_record):
     """Test updating existing record works"""
     error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
-    
+
+    event_message.data = event_msg_data_updating_rec
+
     changes = {'kind': 'dns#change',
                'additions':
                    [{'kind': 'dns#resourceRecordSet',

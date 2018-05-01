@@ -159,6 +159,7 @@ class GDNSPublisher:
             boolean if the changes are done.
         """
         try:
+            print('CHANGES', changes)
             resp = await self.http_client.request('post', self.base_url,
                                                   json=changes)
         except Exception as e:
