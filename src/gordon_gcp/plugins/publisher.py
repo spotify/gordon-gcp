@@ -42,6 +42,7 @@ __all__ = ('GDNSPublisher',)
 
 HOST = 'https://www.googleapis.com'
 BASE_CHANGES_ENDPOINT = '/dns/{version}/projects/{project}/managedZones/{managedZone}/changes'
+RRSETS_ENDPOINT = '/dns/v1/projects/{project}/managedZones/{managedZone}/rrsets'
 
 
 @zope.interface.implementer(interfaces.IPublisherClient)
@@ -146,12 +147,13 @@ class GDNSPublisher:
         msg = 'Timed out waiting for DNS changes to be done'
         raise exceptions.GCPRetryMessageError(msg)
 
-    async def _publish_changes(self, changes):
+    async def _publish_changes(self, changes, rec=False):
         """Post changes to the google API and sample it to
             check if the changes are done.
 
         Args:
             changes (dict): the changes to make
+            rec (bool): flag to call _handle_update only once.
 
         Returns:
             boolean if the changes are done.
@@ -161,8 +163,12 @@ class GDNSPublisher:
                                                   json=changes)
         except Exception as e:
             e_start = 'Issue connecting to www.googleapis.com: '
+            print('ACTUAL E: ', e.args[0])
             status_code = int(e.args[0].split(e_start)[1].split(',')[0])
-            if 400 <= status_code < 500:
+            if status_code == 409 and not rec:
+                await self._handle_update(changes)
+                return
+            elif 400 <= status_code < 500:
                 msg = f'Error: {e} for changes: {changes}'
                 raise exceptions.GCPDropMessageError(msg)
             else:
@@ -172,6 +178,29 @@ class GDNSPublisher:
 
         # TODO: create another task to measure propagation time
         return await self._watch_status(resp_dict['id'])
+
+    async def _handle_update(self, changes):
+        """Handle update changes, after getting 409 error,
+            get the existing record and append deletion
+            action with the rec to the changes,
+            then publish changes again.
+
+        Args:
+            changes: add the deletions action of
+                the existing record to the changes
+
+        """
+        url = HOST + RRSETS_ENDPOINT.format(project=self.project,
+                                            managedZone=self.managed_zone)
+        resp = await self.http_client.get_json(url)
+        rrsets = resp['rrsets']
+
+        record_name = changes['additions'][0]['name']
+        for rec in rrsets:
+            if rec['name'] == record_name:
+                changes['deletions'] = [rec]
+
+        await self._publish_changes(changes, rec=True)
 
     def _assert_zone_for_records(self, records_to_change):
         """Assert zone for all given records.
@@ -211,7 +240,7 @@ class GDNSPublisher:
 
         self._assert_zone_for_records(records_to_change)
 
-        action = self._get_change_action(event_msg)
+        action = self._get_changes_action(event_msg)
 
         for resource_record in records_to_change:
             changes_to_publish = self._format_changes(action,
@@ -219,7 +248,7 @@ class GDNSPublisher:
 
             await self._publish_changes(changes_to_publish)
 
-    def _get_change_action(self, event_msg):
+    def _get_changes_action(self, event_msg):
         """Return action extracted from event message,
             or raise if action is not valid.
 
@@ -269,13 +298,7 @@ if __name__ == '__main__':
         'resourceRecords': [
             {
                 'name': 'service.nurit.com.',
-                'rrdatas': ['127.10.20.22'],
-                'type': 'A',
-                'ttl': 3600
-            },
-            {
-                'name': 'service50.nurit.com.',
-                'rrdatas': ['127.10.20.1000'],
+                'rrdatas': ['127.10.20.22', '127.10.20.25'],
                 'type': 'A',
                 'ttl': 3600
             }

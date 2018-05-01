@@ -191,7 +191,49 @@ def api_response_on_request_changes():
 
 
 @pytest.fixture
-def api_response_json_on_get_json():
+def resp_post_updating_record():
+    return """{
+        "kind": "dns#change",
+        "additions": [
+            {
+                "kind": "dns#resourceRecordSet",
+                "name": "service.nurit.com.",
+                "type": "A",
+                "ttl": 3600,
+                "rrdatas": [
+                    "127.10.20.24"
+                ]
+            }
+        ],
+        "deletions": [
+            {
+                "kind": "dns#resourceRecordSet",
+                "name": "service.nurit.com.",
+                "type": "A",
+                "ttl": 3600,
+                "rrdatas": [
+                    "127.10.20.23"
+                ]
+            }
+        ],
+        "startTime": "2018-05-01T18:41:51.577Z",
+        "id": "13",
+        "status": "pending"
+    }"""
+
+
+@pytest.fixture
+def resp_watch_status_update_record():
+    return {'kind': 'dns#change', 'additions': [
+        {'kind': 'dns#resourceRecordSet', 'name': 'service.nurit.com.', 'type': 'A', 'ttl': 3600,
+         'rrdatas': ['127.10.20.22', '127.10.20.24']}], 'deletions': [
+        {'kind': 'dns#resourceRecordSet', 'name': 'service.nurit.com.', 'type': 'A', 'ttl': 3600,
+         'rrdatas': ['127.10.20.22', '127.10.20.23']}], 'startTime': '2018-05-01T18:41:51.577Z', 'id': '13',
+     'status': 'done'}
+
+
+@pytest.fixture
+def resp_get_json_watch_status():
     return {'kind': 'dns#change',
             'additions': [{'kind': 'dns#resourceRecordSet',
                            'name': 'service3.nurit.com.',
@@ -201,6 +243,21 @@ def api_response_json_on_get_json():
             'startTime': '2018-04-26T15:02:17.541Z',
             'id': '4',
             'status': 'done'}
+
+
+@pytest.fixture
+def resp_get_json_rrsets():
+    return {
+        'kind': 'dns#resourceRecordSetsListResponse',
+        'rrsets': [
+            {'kind': 'dns#resourceRecordSet', 'name': 'nurit.com.', 'type': 'NS', 'ttl': 21600,
+             'rrdatas': ['ns-cloud-c1.googledomains.com.', 'ns-cloud-c2.googledomains.com.',
+                         'ns-cloud-c3.googledomains.com.', 'ns-cloud-c4.googledomains.com.']},
+            {'kind': 'dns#resourceRecordSet', 'name': 'nurit.com.', 'type': 'SOA', 'ttl': 21600,
+             'rrdatas': ['ns-cloud-c1.googledomains.com. cloud-dns-hostmaster.google.com. 1 21600 3600 259200 300']},
+            {'kind': 'dns#resourceRecordSet', 'name': 'service.nurit.com.', 'type': 'A', 'ttl': 3600,
+             'rrdatas': ['127.10.20.22', '127.10.20.23']}]
+    }
 
 
 def test_implements_interface(config, auth_client):
@@ -261,29 +318,35 @@ async def test_invalid_action(
 
 
 @pytest.mark.asyncio
-async def test_failed_on_post_adding_existing_record(
-        publisher_instance, event_message, caplog):
-    """Test error is raised and the message is dropped
-        when trying to add an existing record"""
+async def test_updating_existing_record(
+        publisher_instance, event_message,
+        caplog, resp_get_json_rrsets,
+        resp_post_updating_record,
+        resp_watch_status_update_record):
+    """Test updating existing record works"""
     error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
+    
     changes = {'kind': 'dns#change',
                'additions':
                    [{'kind': 'dns#resourceRecordSet',
-                     'name': 'service3.nurit.com.',
+                     'name': 'service.nurit.com.',
                      'type': 'A', 'ttl': 3600,
                      'rrdatas': ['127.10.20.2']}]
     }
 
     publisher_instance.http_client._request_post_mock.side_effect =\
-        exceptions.GCPHTTPError(error)
+        [exceptions.GCPHTTPError(error), resp_post_updating_record]
+
+    publisher_instance.http_client._get_json_mock.side_effect = \
+        [resp_get_json_rrsets, resp_watch_status_update_record]
 
     await publisher_instance.publish_changes(event_message)
 
-    actual_msg = caplog.records[1].msg
-    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: ' \
-                   f'Error: {error} for changes: {changes}.'
-    assert expected_msg == actual_msg
+    actual_msg = caplog.records
+    print(actual_msg)
+    # test event msg placed into success channel
+    msg = await publisher_instance.success_channel.get()
+    assert msg == event_message
 
 
 @pytest.mark.asyncio
@@ -348,11 +411,11 @@ async def test_failed_on_watch_status(
     mocker, publisher_instance, event_message,
         caplog, get_mock_coro,
         api_response_on_request_changes,
-        api_response_json_on_get_json):
+        resp_get_json_watch_status):
     """Test error is raised and messgae placed into error channel
         when timeout is reached
         on waiting for DNS changes to be done"""
-    api_response_json_on_get_json['status'] = 'pending'
+    resp_get_json_watch_status['status'] = 'pending'
 
     publisher_instance.timeout = 2
 
@@ -362,7 +425,7 @@ async def test_failed_on_watch_status(
     publisher_instance.http_client._request_post_mock.return_value = \
         api_response_on_request_changes
     publisher_instance.http_client._get_json_mock.return_value =\
-        api_response_json_on_get_json
+        resp_get_json_watch_status
 
     await publisher_instance.publish_changes(event_message)
 
@@ -382,12 +445,12 @@ async def test_failed_on_watch_status(
 async def test_event_msg_placed_into_success_channel(
         publisher_instance, event_message,
         api_response_on_request_changes,
-        api_response_json_on_get_json):
+        resp_get_json_watch_status):
     """Test message placed into success channel"""
     publisher_instance.http_client._request_post_mock.return_value = \
         api_response_on_request_changes
     publisher_instance.http_client._get_json_mock.return_value = \
-        api_response_json_on_get_json
+        resp_get_json_watch_status
 
     await publisher_instance.publish_changes(event_message)
 
