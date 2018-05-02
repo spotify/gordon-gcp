@@ -15,14 +15,14 @@
 # limitations under the License.
 
 import asyncio
+
 import pytest
 from google.cloud import pubsub_v1
 from gordon import interfaces
 
 from gordon_gcp import exceptions
-from gordon_gcp.plugins import publisher
 from gordon_gcp.clients import http
-from gordon_gcp.plugins import event_consumer
+from gordon_gcp.plugins import event_consumer, publisher
 
 
 @pytest.fixture
@@ -32,7 +32,47 @@ def config():
             'project': 'pr-tower-hackweek',
             'api_version': 'v1',
             'dns_zone': 'nurit.com.'
+            }
+
+
+@pytest.fixture
+def resource_record():
+    return {
+                'name': 'service.nurit.com.',
+                'rrdatas': ['127.10.20.2'],
+                'type': 'A',
+                'ttl': 3600
+            }
+
+
+@pytest.fixture
+def event_msg_data(resource_record):
+    return {
+        'action': 'additions',
+        'resourceName': 'projects/.../instances/an-instance-name-b45c',
+        'resourceRecords': [resource_record,
+            {
+                'name': 'sub_service.nurit.com.',
+                'rrdatas': ['127.10.20.5'],
+                'type': 'A',
+                'ttl': 3600
+            }
+
+        ]
     }
+
+
+@pytest.fixture
+def event_msg_data_with_invalid_zone(event_msg_data):
+    event_msg_data['resourceRecords'][0]['name'] =\
+        'service.example.com.'
+    return event_msg_data
+
+
+@pytest.fixture
+def event_msg_data_with_invalid_action(event_msg_data):
+    event_msg_data['action'] = 'updating'
+    return event_msg_data
 
 
 @pytest.fixture
@@ -66,72 +106,12 @@ def publisher_instance(mock_http_client, config):
 
 
 @pytest.fixture
-def event_msg_data():
-    return {
-        'action': 'additions',
-        'resourceName': 'projects/.../instances/an-instance-name-b45c',
-        'resourceRecords': [
-            {
-                'name': 'service3.nurit.com.',
-                'rrdatas': ['127.10.20.2'],
-                'type': 'A',
-                'ttl': 3600
-            },
-            {
-                'name': 'service4.nurit.com.',
-                'rrdatas': ['127.10.20.5'],
-                'type': 'A',
-                'ttl': 3600
-            }
-
-        ]
-    }
-
-
-@pytest.fixture
-def event_msg_data_with_invalid_zone():
-    return {
-        'action': 'additions',
-        'resourceName': 'projects/.../instances/an-instance-name-b45c',
-        'resourceRecords': [
-            {
-                'name': 'service.example.com.',
-                'rrdatas': ['1.1.1.1'],
-                'type': 'A',
-                'ttl': 3600
-            }
-        ]
-    }
-
-
-@pytest.fixture
-def event_msg_data_with_invalid_action():
-    return {
-        'action': 'updating',
-        'resourceName': 'projects/.../instances/an-instance-name-b45c',
-        'resourceRecords': [
-            {
-                'name': 'service.nurit.com.',
-                'rrdatas': ['1.1.1.1'],
-                'type': 'A',
-                'ttl': 3600
-            }
-        ]
-    }
-
-
-@pytest.fixture
-def event_msg_data_delete_unexisting_record():
+def event_msg_data_delete_unexisting_record(resource_record):
     return {
         'action': 'deletions',
         'resourceName': 'projects/.../instances/an-instance-name-b45c',
         'resourceRecords': [
-            {
-                'name': 'service5.nurit.com.',
-                'rrdatas': ['127.10.20.8'],
-                'type': 'A',
-                'ttl': 3600
-            }
+            resource_record
         ]
     }
 
@@ -143,7 +123,7 @@ def event_msg_data_bad_rrdata():
         'resourceName': 'projects/.../instances/an-instance-name-b45c',
         'resourceRecords': [
             {
-                'name': 'service5.nurit.com.',
+                'name': 'service.nurit.com.',
                 'rrdatas': ['127.10.20.899'],
                 'type': 'A',
                 'ttl': 3600
@@ -190,7 +170,7 @@ def api_response_on_request_changes():
                      "additions": [
                       {
                        "kind": "dns#resourceRecordSet",
-                       "name": "service3.nurit.com.",
+                       "name": "service.nurit.com.",
                        "type": "A",
                        "ttl": 3600,
                        "rrdatas": [
@@ -238,19 +218,28 @@ def resp_post_updating_record():
 
 @pytest.fixture
 def resp_watch_status_update_record():
-    return {'kind': 'dns#change', 'additions': [
-        {'kind': 'dns#resourceRecordSet', 'name': 'service.nurit.com.', 'type': 'A', 'ttl': 3600,
-         'rrdatas': ['127.10.20.22', '127.10.20.24']}], 'deletions': [
-        {'kind': 'dns#resourceRecordSet', 'name': 'service.nurit.com.', 'type': 'A', 'ttl': 3600,
-         'rrdatas': ['127.10.20.22', '127.10.20.23']}], 'startTime': '2018-05-01T18:41:51.577Z', 'id': '13',
-     'status': 'done'}
+    return {'kind': 'dns#change',
+            'additions': [
+                {'kind': 'dns#resourceRecordSet',
+                 'name': 'service.nurit.com.',
+                 'type': 'A',
+                 'ttl': 3600,
+                 'rrdatas': ['127.10.20.22', '127.10.20.24']}],
+            'deletions': [
+                {'kind': 'dns#resourceRecordSet',
+                 'name': 'service.nurit.com.',
+                 'type': 'A',
+                 'ttl': 3600,
+                 'rrdatas': ['127.10.20.22', '127.10.20.23']}],
+            'startTime': '2018-05-01T18:41:51.577Z', 'id': '13',
+            'status': 'done'}
 
 
 @pytest.fixture
 def resp_get_json_watch_status():
     return {'kind': 'dns#change',
             'additions': [{'kind': 'dns#resourceRecordSet',
-                           'name': 'service3.nurit.com.',
+                           'name': 'service.nurit.com.',
                            'type': 'A',
                            'ttl': 3600,
                            'rrdatas': ['127.10.20.2']}],
@@ -264,12 +253,21 @@ def resp_get_json_rrsets():
     return {
         'kind': 'dns#resourceRecordSetsListResponse',
         'rrsets': [
-            {'kind': 'dns#resourceRecordSet', 'name': 'nurit.com.', 'type': 'NS', 'ttl': 21600,
-             'rrdatas': ['ns-cloud-c1.googledomains.com.', 'ns-cloud-c2.googledomains.com.',
-                         'ns-cloud-c3.googledomains.com.', 'ns-cloud-c4.googledomains.com.']},
-            {'kind': 'dns#resourceRecordSet', 'name': 'nurit.com.', 'type': 'SOA', 'ttl': 21600,
-             'rrdatas': ['ns-cloud-c1.googledomains.com. cloud-dns-hostmaster.google.com. 1 21600 3600 259200 300']},
-            {'kind': 'dns#resourceRecordSet', 'name': 'service.nurit.com.', 'type': 'A', 'ttl': 3600,
+            {'kind': 'dns#resourceRecordSet',
+             'name': 'nurit.com.', 'type': 'NS', 'ttl': 21600,
+             'rrdatas': ['ns-cloud-c1.googledomains.com.',
+                         'ns-cloud-c2.googledomains.com.',
+                         'ns-cloud-c3.googledomains.com.',
+                         'ns-cloud-c4.googledomains.com.']},
+            {'kind': 'dns#resourceRecordSet',
+             'name': 'nurit.com.',
+             'type': 'SOA', 'ttl': 21600,
+             'rrdatas': ['ns-cloud-c1.googledomains.com.'
+                         ' cloud-dns-hostmaster.google.com. '
+                         '1 21600 3600 259200 300']},
+            {'kind': 'dns#resourceRecordSet',
+             'name': 'service.nurit.com.',
+             'type': 'A', 'ttl': 3600,
              'rrdatas': ['127.10.20.22', '127.10.20.23']}]
     }
 
@@ -343,14 +341,6 @@ async def test_updating_existing_record(
 
     event_message.data = event_msg_data_updating_rec
 
-    changes = {'kind': 'dns#change',
-               'additions':
-                   [{'kind': 'dns#resourceRecordSet',
-                     'name': 'service.nurit.com.',
-                     'type': 'A', 'ttl': 3600,
-                     'rrdatas': ['127.10.20.2']}]
-    }
-
     publisher_instance.http_client._request_post_mock.side_effect =\
         [exceptions.GCPHTTPError(error), resp_post_updating_record]
 
@@ -359,8 +349,6 @@ async def test_updating_existing_record(
 
     await publisher_instance.publish_changes(event_message)
 
-    actual_msg = caplog.records
-    print(actual_msg)
     # test event msg placed into success channel
     msg = await publisher_instance.success_channel.get()
     assert msg == event_message
@@ -372,18 +360,20 @@ async def test_failed_on_post_delete_unexisting_record(
         event_message_delete_unexisting_record, caplog):
     """Test error is raised and the message is dropped
         when trying to delete un existing record"""
-    error = "Issue connecting to www.googleapis.com: 404, message='Not Found'"
+    error = "Issue connecting to www.googleapis.com:" \
+            " 404, message='Not Found'"
     changes = {'kind': 'dns#change',
                'deletions':
                    [{'kind': 'dns#resourceRecordSet',
-                     'name': 'service5.nurit.com.',
+                     'name': 'service.nurit.com.',
                      'type': 'A', 'ttl': 3600,
                      'rrdatas': ['127.10.20.8']}]
                }
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
 
-    await publisher_instance.publish_changes(event_message_delete_unexisting_record)
+    await publisher_instance.publish_changes(
+        event_message_delete_unexisting_record)
 
     actual_msg = caplog.records[1].msg
     expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
@@ -404,7 +394,7 @@ async def test_failed_on_post_adding_bad_rrdata(
     changes = {'kind': 'dns#change',
                'additions':
                    [{'kind': 'dns#resourceRecordSet',
-                     'name': 'service5.nurit.com.',
+                     'name': 'service.nurit.com.',
                      'type': 'A', 'ttl': 3600,
                      'rrdatas': ['127.10.20.899']}]
                }

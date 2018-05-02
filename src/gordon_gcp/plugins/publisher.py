@@ -30,19 +30,19 @@ import datetime
 import json
 import logging
 
-import aiohttp
 import zope.interface
 from gordon import interfaces
 
-from gordon_gcp.plugins import _utils, GEventMessage
 from gordon_gcp import exceptions
-from gordon_gcp.clients import http, auth
+from gordon_gcp.plugins import _utils
 
 __all__ = ('GDNSPublisher',)
 
 HOST = 'https://www.googleapis.com'
-BASE_CHANGES_ENDPOINT = '/dns/{version}/projects/{project}/managedZones/{managedZone}/changes'
-RRSETS_ENDPOINT = '/dns/v1/projects/{project}/managedZones/{managedZone}/rrsets'
+BASE_CHANGES_ENDPOINT = \
+    '/dns/{version}/projects/{project}/managedZones/{managedZone}/changes'
+RESOURCE_RECORDS_ENDPOINT = \
+    '/dns/v1/projects/{project}/managedZones/{managedZone}/rrsets'
 
 
 @zope.interface.implementer(interfaces.IPublisherClient)
@@ -71,10 +71,9 @@ class GDNSPublisher:
         self.dns_zone = config['dns_zone']
         self.project = config['project']
         _api_version = config.get('version', 'v1')
-        self.base_url = HOST + \
-                        BASE_CHANGES_ENDPOINT.format(version=_api_version,
-                                                     project=self.project,
-                                                     managedZone=self.managed_zone)
+        self.base_url = HOST + BASE_CHANGES_ENDPOINT.format(
+            version=_api_version, project=self.project,
+            managedZone=self.managed_zone)
         self._logger = logging.getLogger('')
 
     # TODO: This will be eventually moved to GEventMessage
@@ -97,7 +96,8 @@ class GDNSPublisher:
                 'kind': 'dns#resourceRecordSet',
                 'name': resource_record['name'],
                 'type': resource_record['type'],
-                'ttl': resource_record.get('ttl', self.config.get('default_ttl', 300)),
+                'ttl': resource_record.get('ttl',
+                                           self.config.get('default_ttl', 300)),
                 'rrdatas': resource_record['rrdatas']
         }
 
@@ -108,6 +108,7 @@ class GDNSPublisher:
         Args:
             action (str): change action to add
                 to record changes dict
+            resource_record (dict): dict contains record data
 
         Returns:
             The changes to post to google API.
@@ -159,12 +160,10 @@ class GDNSPublisher:
             boolean if the changes are done.
         """
         try:
-            print('CHANGES', changes)
             resp = await self.http_client.request('post', self.base_url,
                                                   json=changes)
         except Exception as e:
             e_start = 'Issue connecting to www.googleapis.com: '
-            print('ACTUAL E: ', e.args[0])
             status_code = int(e.args[0].split(e_start)[1].split(',')[0])
             if status_code == 409 and not rec:
                 await self._handle_update(changes)
@@ -191,8 +190,9 @@ class GDNSPublisher:
                 the existing record to the changes
 
         """
-        url = HOST + RRSETS_ENDPOINT.format(project=self.project,
-                                            managedZone=self.managed_zone)
+        url = HOST + RESOURCE_RECORDS_ENDPOINT.format(
+            project=self.project, managedZone=self.managed_zone)
+
         resp = await self.http_client.get_json(url)
         rrsets = resp['rrsets']
 
@@ -268,44 +268,3 @@ class GDNSPublisher:
             msg = f'Error trying to format changes, ' \
                   f'got an invalid action: {action}'
             raise exceptions.GCPDropMessageError(msg)
-
-
-class PubSubMessage(object):
-    def __init__(self):
-        self.message_id = 123
-
-
-if __name__ == '__main__':
-    kwargs = {
-        'keyfile': "/Users/nuriti/src/gordon-gcp/src/gordon_gcp/plugins/pr-tower-hackweek-1393cea578e8.json",
-        'scopes': ['cloud-platform'],
-    }
-    auth_client = auth.GAuthClient(**kwargs)
-
-    http_client = http.AIOConnection(auth_client=auth_client)
-    config = {'timeout': 90,
-              'managed_zone': 'nurit-com',
-              'project': 'pr-tower-hackweek',
-              'api_version': 'v1',
-              'dns_zone': 'nurit.com.'}
-    success, error = asyncio.Queue(), asyncio.Queue()
-    publisher = GDNSPublisher(config, success, error, http_client)
-
-    loop = asyncio.get_event_loop()
-
-    event_msg_data = {
-        'action': 'additions',
-        'resourceName': 'projects/.../instances/an-instance-name-b45c',
-        'resourceRecords': [
-            {
-                'name': 'service.nurit.com.',
-                'rrdatas': ['127.10.20.22', '127.10.20.25'],
-                'type': 'A',
-                'ttl': 3600
-            }
-        ]
-    }
-    pubsub_msg = PubSubMessage()
-    event_msg = GEventMessage(pubsub_msg, event_msg_data)
-
-    loop.run_until_complete(publisher.publish_changes(event_msg))
