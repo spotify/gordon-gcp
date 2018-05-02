@@ -27,11 +27,7 @@ class StubEventMessage:
     def __init__(self, mocker):
         self.msg_id = '1234'
         self.phase = None
-        self.append_to_history = mocker.Mock(return_value=True)
-
-    # TODO: attach a mock to assert called
-    # def append_to_history(*args, **kwargs):
-    #     return True
+        self.append_to_history = mocker.Mock(return_value=None)
 
 
 class StubPlugin:
@@ -39,34 +35,43 @@ class StubPlugin:
 
     def __init__(self, mocker):
         self._logger = logging.getLogger('')
+        self.success_channel = asyncio.Queue()
         self.error_channel = asyncio.Queue()
+        self.mock_update_phase = mocker.Mock(return_value=None)
 
-    # TODO: attach a mock to assert called
-    async def update_phase(*args, **kwargs):
-        return True
+    # TODO: move this up once GEventMessage "owns" this method
+    async def update_phase(self, *args, **kwargs):
+        event_msg = args[0]
+        event_msg.phase = kwargs.get('phase') or self.phase
+        self.mock_update_phase(*args, **kwargs)
+        event_msg.append_to_history('updating phase')
 
-    @_utils.handle_errors
+    @_utils.route_result
     async def successful(self, event_msg):
-        return True
+        return None
 
-    @_utils.handle_errors
+    @_utils.route_result
     async def raises_drop_message(self, event_msg):
-        raise exceptions.GCPDropMessageError('drop it!')
+        raise exceptions.GCPDropMessageError('drop it')
 
-    @_utils.handle_errors
+    @_utils.route_result
     async def raises_general(self, event_msg):
-        raise exceptions.GCPGordonError('give me another chance!')
+        raise exceptions.GCPGordonError('give me another chance')
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('func,exp_chnl_size,error_msg', [
-    ('successful', 0, None),
-    ('raises_drop_message', 1, 'Dropping message: drop it!'),
-    ('raises_general', 1,
-     'Encountered a retryable error: give me another chance!')
+@pytest.mark.parametrize('func,expected', [
+    ('successful', ('emo', 1, 0, 0, None)),
+    ('raises_drop_message', ('drop', 0, 1, 1,
+                             ('DROPPING: Fatal exception occurred '
+                              'when handling message: drop it.'))),
+    # ('raises_general', (None, 0, 1, 1,
+    #                     ('RETRYING: Exception occurred when handling '
+    #                      'message: give me another chance.')))
 ])
-async def test_wrap_func(func, exp_chnl_size, error_msg, mocker):
+async def test_wrap_func(func, expected, caplog, mocker):
     """event_msg is added to error channel when methods raise."""
+    exp_phase, exp_succ_chnl, exp_err_chnl, exp_log_count, error_msg = expected
     plugin = StubPlugin(mocker)
     event_msg = StubEventMessage(mocker)
 
@@ -74,12 +79,29 @@ async def test_wrap_func(func, exp_chnl_size, error_msg, mocker):
 
     await func_to_test(event_msg)
 
-    assert exp_chnl_size == plugin.error_channel.qsize()
+    assert exp_succ_chnl == plugin.success_channel.qsize()
+    assert exp_err_chnl == plugin.error_channel.qsize()
+    assert exp_log_count == len(caplog.records)
+    assert exp_phase == event_msg.phase
 
-    if error_msg:
-        event_msg.append_to_history.assert_called_once_with(
-            error_msg, plugin.phase)
+    update_call = mocker.call('updating phase')
+    error_call = mocker.call((error_msg, plugin.phase))
+    # if error_msg:
+    #     calls = [
+    #         mocker.call((error_msg, plugin.phase)),
+    #         mocker.call('updating phase')
+    #     ]
+    #     event_msg.append_to_history.assert_called_with(
+    #         error_msg, plugin.phase)
+    # else:
+    #     event_msg.append_to_history.assert_called_once()
 
-    # TODO: see L46 re: mock async method for update_phase
-    # if func == 'raises_drop_message':
-    #     plugin.update_phase.assert_called_once_with(event_msg, phase='drop')
+    if func == 'successful':
+        plugin.mock_update_phase.assert_called_once_with(event_msg)
+        event_msg.append_to_history.assert_called_once_with('updating phase')
+    elif func == 'raises_drop_message':
+        plugin.mock_update_phase.assert_called_once_with(event_msg, phase='drop')
+        event_msg.append_to_history.assert_has_calls([update_call, error_call])
+    else:
+        plugin.mock_update_phase.assert_not_called()
+        event_msg.append_to_history.assert_called_once_with(error_call)
