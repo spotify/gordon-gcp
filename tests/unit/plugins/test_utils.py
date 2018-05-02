@@ -23,8 +23,6 @@ from gordon_gcp import exceptions
 from gordon_gcp.plugins import _utils
 
 
-
-
 class StubEventMessage:
     def __init__(self, mocker):
         self.msg_id = '1234'
