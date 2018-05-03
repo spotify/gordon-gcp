@@ -390,6 +390,32 @@ async def test_failed_adding_bad_rrdata(publisher_instance,
 
 
 @pytest.mark.asyncio
+async def test_failed_unexpected_error_google(publisher_instance,
+                                              event_message,
+                                              caplog):
+    """Test error is raised when getting unexpected error
+        from google API """
+
+    error = "Issue connecting to www.googleapis.com: 500, " \
+            "message='Backend Error'"
+
+    publisher_instance.http_client._request_post_mock.side_effect = \
+        exceptions.GCPHTTPError(error)
+
+    await publisher_instance.publish_changes(event_message)
+
+    actual_msg = caplog.records[1].msg
+
+    expected_msg = f'[msg-1234]: RETRYING: Exception occurred ' \
+                   f'when handling message: {error}.'
+
+    assert expected_msg == actual_msg
+
+    msg = await publisher_instance.error_channel.get()
+    assert msg == event_message
+
+
+@pytest.mark.asyncio
 async def test_failed_watch_status(mocker, publisher_instance, event_message,
                                    caplog, get_mock_coro,
                                    resp_post_changes,

@@ -65,9 +65,9 @@ class StubPlugin:
     ('raises_drop_message', ('drop', 0, 1, 1,
                              ('DROPPING: Fatal exception occurred '
                               'when handling message: drop it.'))),
-    # ('raises_general', (None, 0, 1, 1,
-    #                     ('RETRYING: Exception occurred when handling '
-    #                      'message: give me another chance.')))
+    ('raises_general', (None, 0, 1, 1,
+                        ('RETRYING: Exception occurred when handling '
+                         'message: give me another chance.')))
 ])
 async def test_wrap_func(func, expected, caplog, mocker):
     """event_msg is added to error channel when methods raise."""
@@ -85,16 +85,7 @@ async def test_wrap_func(func, expected, caplog, mocker):
     assert exp_phase == event_msg.phase
 
     update_call = mocker.call('updating phase')
-    error_call = mocker.call((error_msg, plugin.phase))
-    # if error_msg:
-    #     calls = [
-    #         mocker.call((error_msg, plugin.phase)),
-    #         mocker.call('updating phase')
-    #     ]
-    #     event_msg.append_to_history.assert_called_with(
-    #         error_msg, plugin.phase)
-    # else:
-    #     event_msg.append_to_history.assert_called_once()
+    error_call = mocker.call(error_msg, plugin.phase)
 
     if func == 'successful':
         plugin.mock_update_phase.assert_called_once_with(event_msg)
@@ -102,7 +93,8 @@ async def test_wrap_func(func, expected, caplog, mocker):
     elif func == 'raises_drop_message':
         plugin.mock_update_phase.assert_called_once_with(event_msg,
                                                          phase='drop')
-        event_msg.append_to_history.assert_has_calls([update_call, error_call])
+        event_msg.append_to_history.assert_has_calls([error_call, update_call])
     else:
         plugin.mock_update_phase.assert_not_called()
-        event_msg.append_to_history.assert_called_once_with(error_call)
+        event_msg.append_to_history.assert_called_once_with(error_msg,
+                                                            plugin.phase)
