@@ -100,7 +100,8 @@ async def test_wrap_func(func, expected, caplog, mocker):
         plugin.mock_update_phase.assert_called_once_with(event_msg)
         event_msg.append_to_history.assert_called_once_with('updating phase')
     elif func == 'raises_drop_message':
-        plugin.mock_update_phase.assert_called_once_with(event_msg, phase='drop')
+        plugin.mock_update_phase.assert_called_once_with(event_msg,
+                                                         phase='drop')
         event_msg.append_to_history.assert_has_calls([update_call, error_call])
     else:
         plugin.mock_update_phase.assert_not_called()
