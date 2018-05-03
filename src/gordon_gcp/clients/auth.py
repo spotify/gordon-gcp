@@ -19,19 +19,15 @@ Module to create a client interacting with Google Cloud authentication.
 An instantiated client is needed for interacting with any of the Google
 APIs via the :class:`.AIOConnection`.
 
-Only service account (JSON Web Tokens/JWT) authentication is currently
-supported. To setup a service account, follow `Google's docs <https://
-cloud.google.com/iam/docs/creating-managing-service-account-keys>`_.
+The GAuthClient supports both service account (JSON Web Tokens/JWT)
+authentication with keyfiles, and default credentials. To setup a
+service account, follow `Google's docs <https://cloud.google.com/iam/
+docs/creating-managing-service-account-keys>`_.  More information on
+default credentials can be found :ref:`here <app_default_creds>`. To
+setup default credentials, follow `Application Default Credentials`_.
 
-When initializing GAuthClient we support both keyfiles and default
-credentials, when you don't pass a keyfile, we use Application
-Default Credentials and getting the default credentials for
-the current environment.
-
-`Application Default Credentials`_ provides an easy way to obtain
-credentials to call Google APIs for server-to-server or
-local applications.
-For more information see client.rst
+If a keyfile is not provided, the Application Default Credentials will
+be used.
 
 To use:
 
@@ -166,7 +162,6 @@ class GAuthClient:
                 'client_id': self.creds._client_id,
                 'client_secret': self.creds._client_secret,
                 'grant_type': 'refresh_token'
-
             }
 
     async def refresh_token(self):
