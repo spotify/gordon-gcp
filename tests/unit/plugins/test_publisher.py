@@ -259,10 +259,10 @@ async def test_assert_zone_failed(publisher_instance, event_message,
 
     await publisher_instance.publish_changes(event_message)
 
-    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: ' \
-                   f'Error when asserting zone' \
-                   f' for record: {record}.'
+    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
+                    'occurred when handling message: '
+                    'Error when asserting zone '
+                    f'for record: {record}.')
 
     actual_msg = caplog.records[1].msg
 
@@ -279,10 +279,10 @@ async def test_invalid_action(publisher_instance, event_message,
 
     await publisher_instance.publish_changes(event_message)
 
-    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: ' \
-                   f'Error trying to format changes, ' \
-                   f'got an invalid action: {action}.'
+    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
+                    'occurred when handling message: '
+                    'Error trying to format changes, '
+                    f'got an invalid action: {action}.')
 
     actual_msg = caplog.records[1].msg
 
@@ -295,7 +295,7 @@ async def test_updating_existing_record(publisher_instance, event_message,
                                         resp_get_json_resource_record_sets,
                                         resp_post_updating_record,
                                         resp_watch_status_update_record):
-    """Test that updating an existing record works"""
+    """Test updating an existing record"""
     error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
 
     event_message.data = event_msg_data_updating_record
@@ -322,21 +322,21 @@ async def test_updating_existing_record(publisher_instance, event_message,
 async def test_failed_delete_unexisting_record(publisher_instance,
                                                event_message, resource_record,
                                                event_msg_data, caplog):
-    """Test error is raised and the message is dropped
-        when trying to delete un existing record"""
+    """Error handled on deleting unexisting record"""
     event_msg_data['action'] = 'deletions'
     event_msg_data['resourceRecords'] = [resource_record]
     event_message.data = event_msg_data
 
-    error = "Issue connecting to www.googleapis.com:" \
-            " 404, message='Not Found'"
+    error = ("Issue connecting to www.googleapis.com:"
+             " 404, message='Not Found'")
 
-    resource_record_changes = {'kind': 'dns#resourceRecordSet',
-                               'name': 'service.nurit.com.',
-                               'type': 'A',
-                               'ttl': 3600,
-                               'rrdatas': ['127.10.20.2']
-                               }
+    resource_record_changes = {
+        'name': 'service.nurit.com.',
+        'rrdatas': ['127.10.20.2'],
+        'type': 'A',
+        'ttl': 3600,
+        'kind': 'dns#resourceRecordSet'
+    }
 
     changes = {'kind': 'dns#change',
                'deletions': [resource_record_changes]}
@@ -347,9 +347,9 @@ async def test_failed_delete_unexisting_record(publisher_instance,
 
     actual_msg = caplog.records[1].msg
 
-    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: ' \
-                   f'Error: {error} for changes: {changes}.'
+    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
+                    'occurred when handling message: '
+                    f'Error: {error} for changes: {changes}.')
 
     assert expected_msg == actual_msg
 
@@ -358,20 +358,21 @@ async def test_failed_delete_unexisting_record(publisher_instance,
 async def test_failed_adding_bad_rrdata(publisher_instance,
                                         event_message,
                                         caplog, event_msg_data_bad_rrdata):
-    """Test error is raised and the message is dropped
-            when trying to add record with bad rrdata"""
+    """Test error is raised when trying to add record with bad rrdata"""
     event_message.data = event_msg_data_bad_rrdata
 
     error = "Issue connecting to www.googleapis.com: 400, message='Bad Request'"
 
-    changes = {'kind': 'dns#change',
-               'additions':
-                   [{'kind': 'dns#resourceRecordSet',
-                     'name': 'service.nurit.com.',
-                     'type': 'A',
-                     'ttl': 3600,
-                     'rrdatas': ['127.10.20.899']}]
-               }
+    changes = {
+        'kind': 'dns#change',
+        'additions':
+            [{'name': 'service.nurit.com.',
+              'rrdatas': ['127.10.20.899'],
+              'type': 'A',
+              'ttl': 3600,
+              'kind': 'dns#resourceRecordSet'
+              }]
+    }
 
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
@@ -379,9 +380,10 @@ async def test_failed_adding_bad_rrdata(publisher_instance,
     await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
-    expected_msg = f'[msg-1234]: DROPPING: Fatal exception ' \
-                   f'occurred when handling message: ' \
-                   f'Error: {error} for changes: {changes}.'
+
+    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
+                    'occurred when handling message: '
+                    f'Error: {error} for changes: {changes}.')
 
     assert expected_msg == actual_msg
 
@@ -393,11 +395,10 @@ async def test_failed_adding_bad_rrdata(publisher_instance,
 async def test_failed_unexpected_error_google(publisher_instance,
                                               event_message,
                                               caplog):
-    """Test error is raised when getting unexpected error
-        from google API """
+    """Error is raised when getting unexpected error from google API"""
 
-    error = "Issue connecting to www.googleapis.com: 500, " \
-            "message='Backend Error'"
+    error = ("Issue connecting to www.googleapis.com: 500, "
+             "message='Backend Error'")
 
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
@@ -406,8 +407,31 @@ async def test_failed_unexpected_error_google(publisher_instance,
 
     actual_msg = caplog.records[1].msg
 
-    expected_msg = f'[msg-1234]: RETRYING: Exception occurred ' \
-                   f'when handling message: {error}.'
+    expected_msg = ('[msg-1234]: RETRYING: Exception occurred '
+                    f'when handling message: {error}.')
+
+    assert expected_msg == actual_msg
+
+    msg = await publisher_instance.error_channel.get()
+    assert msg == event_message
+
+
+@pytest.mark.asyncio
+async def test_failed_unexpected_error_no_status_code(publisher_instance,
+                                                      event_message,
+                                                      caplog):
+    """Error is raised when getting unexpected error from google API"""
+    error = "Issue connecting to www.googleapis.com: message='Backend Error'"
+
+    publisher_instance.http_client._request_post_mock.side_effect = \
+        exceptions.GCPHTTPError(error)
+
+    await publisher_instance.publish_changes(event_message)
+
+    actual_msg = caplog.records[1].msg
+
+    expected_msg = ('[msg-1234]: RETRYING: Exception occurred '
+                    f'when handling message: {error}.')
 
     assert expected_msg == actual_msg
 
@@ -420,8 +444,7 @@ async def test_failed_watch_status(mocker, publisher_instance, event_message,
                                    caplog, get_mock_coro,
                                    resp_post_changes,
                                    resp_watch_status):
-    """Test error is raised and message placed into error channel
-        when timeout is reached on waiting for DNS changes to be done"""
+    """Error raised on timeout in watch status"""
     resp_watch_status['status'] = 'pending'
 
     publisher_instance.timeout = 2
@@ -439,9 +462,9 @@ async def test_failed_watch_status(mocker, publisher_instance, event_message,
 
     actual_msg = caplog.records[1].msg
 
-    expected_msg = '[msg-1234]: RETRYING: ' \
-                   'Exception occurred when handling message: ' \
-                   'Timed out waiting for DNS changes to be done.'
+    expected_msg = ('[msg-1234]: RETRYING: '
+                    'Exception occurred when handling message: '
+                    'Timed out waiting for DNS changes to be done.')
 
     assert expected_msg == actual_msg
 

@@ -97,8 +97,9 @@ class AIOConnection:
                 include :attr:`DEFAULT_REQUEST_HEADERS`.
             body (obj): (optional) A dictionary, bytes, or file-like
                 object to send in the body of the request.
-            json (obj): Any json compatible python object (optional).
-                NOTE: json and data parameters could not be used at
+            json (obj): (optional) Any json compatible python
+                object.
+                NOTE: json and body parameters could not be used at
                 the same time.
         Returns:
             (str) HTTP response body.

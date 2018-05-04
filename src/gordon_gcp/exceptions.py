@@ -47,5 +47,4 @@ class GCPDropMessageError(GCPGordonError):
 
 
 class GCPRetryMessageError(GCPGordonError):
-    # todo change docstring
-    """Base class for when event message should be dropped."""
+    """Base class for when event message should be Retried."""
