@@ -84,7 +84,7 @@ def event_msg_data_bad_rrdata(event_msg_data):
 @pytest.fixture
 def event_msg_data_updating_record(event_msg_data,
                                    resource_record):
-    resource_record['rrdatas'] = ["127.10.20.23"]
+    resource_record['rrdatas'] = ['127.10.20.23']
     event_msg_data['resourceRecords'] = [resource_record]
     return event_msg_data
 
@@ -239,14 +239,14 @@ def test_implements_interface(config, auth_client):
     client = http.AIOConnection(auth_client=auth_client)
 
     success, error = asyncio.Queue(), asyncio.Queue()
-    client = publisher.GDNSPublisher(config, success, error, client)
+    publisher_client = publisher.GDNSPublisher(config, success, error, client)
 
-    assert interfaces.IPublisherClient.providedBy(client)
+    assert interfaces.IPublisherClient.providedBy(publisher_client)
     assert interfaces.IPublisherClient.implementedBy(publisher.GDNSPublisher)
-    assert config is client.config
-    assert success is client.success_channel
-    assert error is client.error_channel
-    assert 'publish' == client.phase
+    assert config is publisher_client.config
+    assert success is publisher_client.success_channel
+    assert error is publisher_client.error_channel
+    assert 'publish' == publisher_client.phase
 
 
 @pytest.mark.asyncio
@@ -254,15 +254,13 @@ async def test_assert_zone_failed(publisher_instance, event_message,
                                   event_msg_data_with_invalid_zone, caplog):
     """Test error is raised on asserting zone"""
     event_message.data = event_msg_data_with_invalid_zone
-
     record = event_message.data['resourceRecords'][0]
-
-    await publisher_instance.publish_changes(event_message)
-
     expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
                     'occurred when handling message: '
                     'Error when asserting zone '
                     f'for record: {record}.')
+
+    await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
 
@@ -274,15 +272,13 @@ async def test_invalid_action(publisher_instance, event_message,
                               event_msg_data_with_invalid_action, caplog):
     """Test error is raised when the action is invalid in the record"""
     event_message.data = event_msg_data_with_invalid_action
-
     action = event_msg_data_with_invalid_action['action']
-
-    await publisher_instance.publish_changes(event_message)
-
     expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
                     'occurred when handling message: '
                     'Error trying to format changes, '
                     f'got an invalid action: {action}.')
+
+    await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
 
@@ -297,14 +293,11 @@ async def test_updating_existing_record(publisher_instance, event_message,
                                         resp_watch_status_update_record):
     """Test updating an existing record"""
     error = "Issue connecting to www.googleapis.com: 409, message='Conflict'"
-
     event_message.data = event_msg_data_updating_record
-
     # two responses: 1. when posting the changes for the first time
     # 2. after fixing the changes and then posting again.
     publisher_instance.http_client._request_post_mock.side_effect = \
         [exceptions.GCPHTTPError(error), resp_post_updating_record]
-
     # two responses: 1. get resource record sets
     # 2. watch status
     publisher_instance.http_client._get_json_mock.side_effect = \
@@ -326,10 +319,8 @@ async def test_failed_delete_unexisting_record(publisher_instance,
     event_msg_data['action'] = 'deletions'
     event_msg_data['resourceRecords'] = [resource_record]
     event_message.data = event_msg_data
-
     error = ("Issue connecting to www.googleapis.com:"
              " 404, message='Not Found'")
-
     resource_record_changes = {
         'name': 'service.nurit.com.',
         'rrdatas': ['127.10.20.2'],
@@ -337,19 +328,17 @@ async def test_failed_delete_unexisting_record(publisher_instance,
         'ttl': 3600,
         'kind': 'dns#resourceRecordSet'
     }
-
     changes = {'kind': 'dns#change',
                'deletions': [resource_record_changes]}
+    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
+                    'occurred when handling message: '
+                    f'Http error: {error} for changes: {changes}.')
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
 
     await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
-
-    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
-                    'occurred when handling message: '
-                    f'Error: {error} for changes: {changes}.')
 
     assert expected_msg == actual_msg
 
@@ -360,9 +349,7 @@ async def test_failed_adding_bad_rrdata(publisher_instance,
                                         caplog, event_msg_data_bad_rrdata):
     """Test error is raised when trying to add record with bad rrdata"""
     event_message.data = event_msg_data_bad_rrdata
-
     error = "Issue connecting to www.googleapis.com: 400, message='Bad Request'"
-
     changes = {
         'kind': 'dns#change',
         'additions':
@@ -373,21 +360,18 @@ async def test_failed_adding_bad_rrdata(publisher_instance,
               'kind': 'dns#resourceRecordSet'
               }]
     }
-
+    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
+                    'occurred when handling message: '
+                    f'Http error: {error} for changes: {changes}.')
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
 
     await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
-
-    expected_msg = ('[msg-1234]: DROPPING: Fatal exception '
-                    'occurred when handling message: '
-                    f'Error: {error} for changes: {changes}.')
+    msg = await publisher_instance.error_channel.get()
 
     assert expected_msg == actual_msg
-
-    msg = await publisher_instance.error_channel.get()
     assert msg == event_message
 
 
@@ -399,20 +383,17 @@ async def test_failed_unexpected_error_google(publisher_instance,
 
     error = ("Issue connecting to www.googleapis.com: 500, "
              "message='Backend Error'")
-
+    expected_msg = ('[msg-1234]: RETRYING: Exception occurred '
+                    f'when handling message: {error}.')
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
 
     await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
-
-    expected_msg = ('[msg-1234]: RETRYING: Exception occurred '
-                    f'when handling message: {error}.')
+    msg = await publisher_instance.error_channel.get()
 
     assert expected_msg == actual_msg
-
-    msg = await publisher_instance.error_channel.get()
     assert msg == event_message
 
 
@@ -422,20 +403,17 @@ async def test_failed_unexpected_error_no_status_code(publisher_instance,
                                                       caplog):
     """Error is raised when getting unexpected error from google API"""
     error = "Issue connecting to www.googleapis.com: message='Backend Error'"
-
+    expected_msg = ('[msg-1234]: RETRYING: Exception occurred '
+                    f'when handling message: {error}.')
     publisher_instance.http_client._request_post_mock.side_effect = \
         exceptions.GCPHTTPError(error)
 
     await publisher_instance.publish_changes(event_message)
 
     actual_msg = caplog.records[1].msg
-
-    expected_msg = ('[msg-1234]: RETRYING: Exception occurred '
-                    f'when handling message: {error}.')
+    msg = await publisher_instance.error_channel.get()
 
     assert expected_msg == actual_msg
-
-    msg = await publisher_instance.error_channel.get()
     assert msg == event_message
 
 
@@ -446,30 +424,24 @@ async def test_failed_watch_status(mocker, publisher_instance, event_message,
                                    resp_watch_status):
     """Error raised on timeout in watch status"""
     resp_watch_status['status'] = 'pending'
-
     publisher_instance.timeout = 2
-
     mock, _coroutine = get_mock_coro()
     mocker.patch('asyncio.sleep', _coroutine)
-
     publisher_instance.http_client._request_post_mock.return_value = \
         resp_post_changes
-
     publisher_instance.http_client._get_json_mock.return_value = \
         resp_watch_status
-
-    await publisher_instance.publish_changes(event_message)
-
-    actual_msg = caplog.records[1].msg
-
     expected_msg = ('[msg-1234]: RETRYING: '
                     'Exception occurred when handling message: '
                     'Timed out waiting for DNS changes to be done.')
 
-    assert expected_msg == actual_msg
+    await publisher_instance.publish_changes(event_message)
 
-    # test event msg placed into error channel
+    actual_msg = caplog.records[1].msg
     msg = await publisher_instance.error_channel.get()
+
+    assert expected_msg == actual_msg
+    # test event msg placed into error channel
     assert msg == event_message
 
 
@@ -488,4 +460,5 @@ async def test_event_msg_placed_into_success_channel(publisher_instance,
 
     # test event msg placed into success channel
     msg = await publisher_instance.success_channel.get()
+
     assert msg == event_message

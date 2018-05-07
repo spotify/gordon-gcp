@@ -76,6 +76,9 @@ class GDNSPublisher:
         self.base_url = BASE_CHANGES_ENDPOINT.format(
             host=HOST, version=_api_version, project=self.project,
             managedZone=self.managed_zone)
+        self.resource_records_url = \
+            RESOURCE_RECORDS_ENDPOINT.format(host=HOST, project=self.project,
+                                             managedZone=self.managed_zone)
         self._logger = logging.getLogger('')
 
     # TODO: This will be eventually moved to GEventMessage
@@ -134,15 +137,15 @@ class GDNSPublisher:
         msg = 'Timed out waiting for DNS changes to be done'
         raise exceptions.GCPRetryMessageError(msg)
 
-    async def _publish_changes(self, changes, rec=False):
+    async def _publish_changes(self, changes, on_update=False):
         """Post changes to the google API and watch request status.
 
         Args:
             changes (dict): the changes to make.
-            rec (bool): flag to call _handle_update only once.
+            on_update (bool): flag to call _handle_update only once.
 
         Returns:
-            Boolean if the changes are done.
+            True if the changes are done.
         """
         try:
             resp = await self.http_client.request('post', self.base_url,
@@ -154,12 +157,11 @@ class GDNSPublisher:
             if match:
                 status_code = int(match.group(0))
 
-                if status_code == 409 and not rec:
-                    await self._handle_update(changes)
-                    return
+                if status_code == 409 and not on_update:
+                    return await self._handle_update(changes)
                 elif 400 <= status_code < 500:
-                    msg = f'Error: {e} for changes: {changes}'
-                    raise exceptions.GCPDropMessageError(msg)
+                    msg = f'Http error: {e} for changes: {changes}'
+                    raise exceptions.GCPBadRequestHTTPError(msg)
             raise e
 
         resp_dict = json.loads(resp)
@@ -178,10 +180,7 @@ class GDNSPublisher:
             changes (dict): add the deletions action of
                 the existing record to the changes.
         """
-        url = RESOURCE_RECORDS_ENDPOINT.format(host=HOST, project=self.project,
-                                               managedZone=self.managed_zone)
-
-        resp = await self.http_client.get_json(url)
+        resp = await self.http_client.get_json(self.resource_records_url)
         rrsets = resp['rrsets']
 
         record_name = changes['additions'][0]['name']
@@ -189,7 +188,7 @@ class GDNSPublisher:
             if rec['name'] == record_name:
                 changes['deletions'] = [rec]
 
-        await self._publish_changes(changes, rec=True)
+        await self._publish_changes(changes, on_update=True)
 
     def _assert_zone_for_records(self, records_to_change):
         """Assert zone for all given records.
@@ -248,7 +247,7 @@ class GDNSPublisher:
         """
         action = event_msg.data['action']
 
-        if action == 'additions' or action == 'deletions':
+        if action in ['additions', 'deletions']:
             return action
         else:
             msg = ('Error trying to format changes, '

@@ -48,3 +48,7 @@ class GCPDropMessageError(GCPGordonError):
 
 class GCPRetryMessageError(GCPGordonError):
     """Base class for when event message should be Retried."""
+
+
+class GCPBadRequestHTTPError(GCPDropMessageError):
+    """An HTTP error occurred on bad request"""
