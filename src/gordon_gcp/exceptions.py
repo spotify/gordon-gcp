@@ -40,3 +40,15 @@ class GCPAuthError(GCPGordonError):
 
 class GCPConfigError(GCPGordonError):
     """Improper or incomplete configuration for plugin."""
+
+
+class GCPDropMessageError(GCPGordonError):
+    """Base class for when event message should be dropped."""
+
+
+class GCPRetryMessageError(GCPGordonError):
+    """Base class for when event message should be Retried."""
+
+
+class GCPBadRequestHTTPError(GCPDropMessageError):
+    """An HTTP error occurred on bad request"""

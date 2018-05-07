@@ -212,3 +212,45 @@ async def test_get_json(json_func, exp_resp, client, monkeypatch, caplog):
     assert exp_resp == resp
     assert 1 == mock_set_valid_token_called
     assert 2 == len(caplog.records)
+
+
+@pytest.mark.parametrize('post_arg', ('json', 'body'))
+@pytest.mark.asyncio
+async def test_post_data(post_arg, client, monkeypatch, caplog):
+    """HTTP POST request."""
+    mock_set_valid_token_called = 0
+
+    async def mock_set_valid_token():
+        nonlocal mock_set_valid_token_called
+        mock_set_valid_token_called += 1
+
+    monkeypatch.setattr(client, 'set_valid_token', mock_set_valid_token)
+
+    post_data = {'hello': 'world'}
+
+    request_kwargs = {
+        'method': 'post',
+        'url': conftest.API_URL,
+        post_arg: post_data
+    }
+
+    with aioresponses() as mocked:
+        mocked.post(conftest.API_URL, status=204)
+        resp = await client.request(**request_kwargs)
+
+    assert '' == resp
+    assert 1 == mock_set_valid_token_called
+    assert 2 == len(caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_post_json_raises(client, monkeypatch, caplog):
+    """POST JSON data and body fails."""
+    post_json = {'hello': 'world'}
+    exp_msg = ('"json" and "body" request parameters can not be used '
+               'at the same time')
+    with pytest.raises(exceptions.GCPHTTPError, match=exp_msg):
+        await client.request(
+            'post', conftest.API_URL, body=post_json, json=post_json)
+
+    assert 1 == len(caplog.records)
