@@ -253,6 +253,6 @@ def test_get_enricher_config_bad_dns_zone(mocker, caplog, enricher_config,
     with pytest.raises(exceptions.GCPConfigError) as e:
         plugins.get_enricher(enricher_config, success_chnl, error_chnl)
 
-    exc_msg = 'A dns zone must be a FQDN and end with the root zone \("."\).'
+    exc_msg = 'A dns zone must be an FQDN and end with the root zone \("."\).'
     e.match('Invalid configuration:\n' + exc_msg)
     assert 1 == len(caplog.records)
