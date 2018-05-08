@@ -65,6 +65,7 @@ class GCEEnricherBuilder:
 
     def _validate_config(self):
         # req keys: dns_zone, keyfile
+        # opt keys: retries
         errors = []
         if not self.config.get('keyfile'):
             msg = ('The path to a Service Account JSON keyfile is required to '
@@ -76,7 +77,7 @@ class GCEEnricherBuilder:
             errors.append(msg)
 
         if not self.config.get('dns_zone', '').endswith('.'):
-            msg = 'A dns zone must be a FQDN and end with the root zone (".").'
+            msg = 'A dns zone must be an FQDN and end with the root zone (".").'
             errors.append(msg)
 
         if errors:
