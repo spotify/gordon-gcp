@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Client module to enrich an event message with any missing information (
-such as IP addresses to a new hostname) and to generate the desired
+Client module to enrich an event message with any missing information
+(such as IP addresses to a new hostname) and to generate the desired
 record(s) (e.g. ``A`` or ``CNAME`` records). Once an event message is
 done (either successfully enriched or met with errors along the way),
 it will be placed into the appropriate channel, either the
@@ -128,19 +128,21 @@ class GCEEnricher:
         self._http_client = http_client
         self._logger = logging.getLogger('')
 
+    def _check_instance_data(self, instance_data):
+        assert self._get_external_ip(instance_data)
+
     async def _poll_for_instance_data(self, resource_name, msg_logger):
         exception = None
         backoff = 2
         base_url = f'https://compute.googleapis.com/compute/v1/{resource_name}'
 
-        # Poll until instance data contains external IP information.
+        # Poll until instance data contains all necessary information.
         for attempt in range(1, self.config['retries'] + 1):
             try:
                 msg_logger.debug(f'Attempt {attempt}: fetching {base_url}')
                 instance_data = await self._http_client.get_json(base_url)
 
-                network_interfaces = instance_data['networkInterfaces']
-                assert network_interfaces[0]['accessConfigs'][0]['natIP']
+                self._check_instance_data(instance_data)
 
                 return instance_data
             except exceptions.GCPHTTPError as e:
@@ -153,32 +155,40 @@ class GCEEnricher:
                 await asyncio.sleep(backoff)
                 backoff = backoff ** 2
 
-        msg = (f'Could not get external IP for {resource_name}: '
+        msg = (f'Could not get necessary information for {resource_name}: '
                f'{exception.__class__.__name__}: {exception}')
         raise exceptions.GCPGordonError(msg)
 
-    async def _create_A_rrecord(self, event_data, instance_data, msg_logger):
-        dns_zone = self.config['dns_zone']
-        hostname = event_data['resourceName'].split('/')[-1]
-        access_configs = instance_data['networkInterfaces'][0]['accessConfigs']
-        external_ip = access_configs[0]['natIP']
-
-        name = '.'.join([hostname, dns_zone])
-        msg_logger.debug(f'Creating A record: {name} -> {external_ip}')
+    def _create_A_rrecord(self, fqdn, external_ip, default_ttl, msg_logger):
+        msg_logger.debug(f'Creating A record: {fqdn} -> {external_ip}')
         return {
-            'name': name,
+            'name': fqdn,
             'rrdatas': [external_ip],
             'type': 'A',
-            'ttl': self.config['default_ttl']
+            'ttl': default_ttl
         }
 
-    async def _create_rrecords(self, event_data, msg_logger):
-        instance_data = await self._poll_for_instance_data(
-            event_data['resourceName'], msg_logger)
+    def _get_fqdn(self, hostname):
+        dns_zone = self.config['dns_zone']
+        return '.'.join([hostname, dns_zone])
 
-        a_record = await self._create_A_rrecord(event_data, instance_data,
-                                                msg_logger)
-        return [a_record]
+    def _get_external_ip(self, instance_data):
+        interfaces = instance_data['networkInterfaces']
+        return interfaces[0]['accessConfigs'][0]['natIP']
+
+    def _get_internal_ip(self, instance_data):
+        interfaces = instance_data['networkInterfaces']
+        return interfaces[0]['networkIP']
+
+    async def _create_rrecords(self, event_data, instance_data, msg_logger):
+        # async in case anything gets added in a subclass that needs to be async
+        fqdn = self._get_fqdn(instance_data['name'])
+        external_ip = self._get_external_ip(instance_data)
+        default_ttl = self.config['default_ttl']
+        return [
+            self._create_A_rrecord(
+                fqdn, external_ip, default_ttl, msg_logger)
+        ]
 
     async def process(self, event_message):
         """
@@ -195,9 +205,11 @@ class GCEEnricher:
         """
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': event_message.msg_id})
-        data = event_message.data
         try:
-            records = await self._create_rrecords(data, msg_logger)
+            instance_data = await self._poll_for_instance_data(
+                event_message.data['resourceName'], msg_logger)
+            records = await self._create_rrecords(
+                event_message.data, instance_data, msg_logger)
         except exceptions.GCPGordonError as e:
             msg = ('Encountered error while enriching message, sending message'
                    f' to error channel: {e}.')
