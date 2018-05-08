@@ -23,13 +23,16 @@ from gordon_gcp import exceptions
 from gordon_gcp.plugins import enricher
 
 
-INSTANCE_NETWORK_DATA = {
-    'networkInterfaces': [{
-        'accessConfigs': [{
-            'natIP': '127.99.199.27'
-        }],
-    }]
-}
+@pytest.fixture
+def instance_data(audit_log_data):
+    return {
+        'name': audit_log_data['resourceName'].split('/')[-1],
+        'networkInterfaces': [{
+            'accessConfigs': [{
+                'natIP': '127.99.199.27'
+            }],
+        }]
+    }
 
 
 @pytest.fixture
@@ -72,16 +75,21 @@ def mock_async_sleep(mocker, get_mock_coro):
     return sleep_mock
 
 
-@pytest.mark.parametrize('network_data,sleep_calls,logs_logged', [
-    ([INSTANCE_NETWORK_DATA], 0, 3),
-    ([{}, {}, INSTANCE_NETWORK_DATA], 2, 5)])
+@pytest.mark.parametrize('sleep_calls,logs_logged', [
+    (0, 3),
+    (2, 5)])
 @pytest.mark.asyncio
 async def test_process_event_msg(config, gevent_msg, channel_pair,
                                  mock_async_sleep, mock_http_client, caplog,
-                                 network_data, sleep_calls, logs_logged):
+                                 instance_data, sleep_calls, logs_logged):
     """Successfully enrich event message and put on the success channel."""
     success_chnl, error_chnl = channel_pair
-    mock_http_client._get_json_mock.side_effect = network_data
+    instance_mocked_data = []
+    for i in range(sleep_calls):
+        instance_mocked_data.append({})
+    instance_mocked_data.append(instance_data)
+    mock_http_client._get_json_mock.side_effect = instance_mocked_data
+
     gce_enricher = enricher.GCEEnricher(config, mock_http_client, success_chnl,
                                         error_chnl)
 
@@ -100,7 +108,7 @@ async def test_process_event_msg(config, gevent_msg, channel_pair,
         ]),
         'type': 'A',
         'rrdatas': [
-            INSTANCE_NETWORK_DATA['networkInterfaces'][0]['accessConfigs'][0][
+            instance_data['networkInterfaces'][0]['accessConfigs'][0][
                 'natIP']
         ],
         'ttl': config['default_ttl']
@@ -136,8 +144,9 @@ async def test_process_event_msg_failures(config, gevent_msg, channel_pair,
     assert logs_logged == len(caplog.records)
     assert 1 == len(ret_event_message.history_log)
     assert 'enrich' == ret_event_message.history_log[0]['plugin']
-    expected_history_msg = ('Encountered error while enriching message, sending'
-                            ' message to error channel: Could not get external '
-                            'IP for projects/123456789101/zones/us-central1-c/'
+    expected_history_msg = ('Encountered error while enriching message, '
+                            'sending message to error channel: Could not get '
+                            'necessary information for '
+                            'projects/123456789101/zones/us-central1-c/'
                             f'instances/an-instance-name-b34c: {err_msg}.')
     assert expected_history_msg == ret_event_message.history_log[0]['message']
