@@ -11,6 +11,7 @@ project = "my-gcp-project"
 [gcp.enricher]
 keyfile = "/path/to/keyfiles/compute.json"
 dns_zone = "example.com."
+zone_name = "example-com"  # arbitrary name of the DNS zone in Google DNS
 
 [gcp.event_consumer]
 keyfile = "/path/to/keyfiles/pubsub.json"
