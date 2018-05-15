@@ -218,6 +218,7 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
 
     client = plugins.get_enricher(enricher_config, success_chnl, error_chnl)
 
+    assert isinstance(client, plugins.enricher.GCEEnricher)
     assert client.config
     assert retries == client.config['retries']
     assert client.success_channel
