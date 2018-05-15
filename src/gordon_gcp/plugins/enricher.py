@@ -62,32 +62,50 @@ class GCEEnricherBuilder:
         self.success_channel = success_channel
         self.error_channel = error_channel
         self.kwargs = kwargs
+        self._validate_config()
+        self.http_client = self._init_http_client()
+
+    def _validate_keyfile(self):
+        msg = []
+        if not self.config.get('keyfile'):
+            msg.append('The path to a Service Account JSON keyfile is required '
+                       'to authenticate to the GCE API.')
+        return msg
+
+    def _validate_dns_zone(self):
+        msg = []
+        if not self.config.get('dns_zone'):
+            msg.append('A dns zone is required to build correct A records.')
+        if not self.config.get('dns_zone', '').endswith('.'):
+            msg.append('A dns zone must be an FQDN and end with the root '
+                       'zone (".").')
+        return msg
+
+    def _validate_retries(self):
+        if not self.config.get('retries'):
+            self.config['retries'] = 5
+        return []
+
+    def _call_validators(self):
+        """Actually run all the validations.
+
+        Returns:
+            list(str): Error messages from the validators.
+        """
+        msg = []
+        msg.extend(self._validate_keyfile())
+        msg.extend(self._validate_dns_zone())
+        msg.extend(self._validate_retries())
+        return msg
 
     def _validate_config(self):
-        # req keys: dns_zone, keyfile
-        # opt keys: retries
         errors = []
-        if not self.config.get('keyfile'):
-            msg = ('The path to a Service Account JSON keyfile is required to '
-                   'authenticate to the GCE API.')
-            errors.append(msg)
-
-        if not self.config.get('dns_zone'):
-            msg = 'A dns zone is required to build correct A records.'
-            errors.append(msg)
-
-        if not self.config.get('dns_zone', '').endswith('.'):
-            msg = 'A dns zone must be an FQDN and end with the root zone (".").'
-            errors.append(msg)
-
+        errors = self._call_validators()
         if errors:
             error_msgs = '\n'.join(errors)
             exp_msg = f'Invalid configuration:\n{error_msgs}'
             logging.error(error_msgs)
             raise exceptions.GCPConfigError(exp_msg)
-
-        if not self.config.get('retries'):
-            self.config['retries'] = 5
 
     def _init_auth(self):
         scopes = self.config.get('scopes')
@@ -99,10 +117,9 @@ class GCEEnricherBuilder:
         return http.AIOConnection(auth_client=auth_client)
 
     def build_enricher(self):
-        self._validate_config()
-        http_client = self._init_http_client()
-        return GCEEnricher(self.config, http_client, self.success_channel,
-                           self.error_channel)
+        return GCEEnricher(
+            self.config, self.http_client, self.success_channel,
+            self.error_channel)
 
 
 @zope.interface.implementer(interfaces.IEnricherClient)
