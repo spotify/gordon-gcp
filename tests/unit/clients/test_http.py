@@ -40,8 +40,6 @@ def test_http_client_default(provide_session, mocker):
 
     auth_client = mocker.Mock(auth.GAuthClient)
     auth_client._session = aiohttp.ClientSession()
-    creds = mocker.Mock()
-    auth_client.creds = creds
     client = http.AIOConnection(auth_client=auth_client, session=session)
 
     if provide_session:
@@ -86,8 +84,8 @@ async def test_set_valid_token(token, expiry, exp_mocked_refresh, client,
         nonlocal mock_refresh_token_called
         mock_refresh_token_called += 1
 
-    client._auth_client.creds.token = token
-    client._auth_client.creds.expiry = expiry
+    client._auth_client.token = token
+    client._auth_client.expiry = expiry
 
     monkeypatch.setattr(
         client._auth_client, 'refresh_token', mock_refresh_token)
@@ -149,6 +147,36 @@ async def test_request_refresh(client, monkeypatch, caplog):
     assert resp == resp_text
     assert 2 == mock_set_valid_token_called
     assert 5 == len(caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_request_refresh_just_once(mocker, client, monkeypatch, caplog):
+    """Auth token is refreshed just once for multiple successful requests."""
+    mock_refresh_token_called = 0
+
+    async def mock_auth_refresh_token():
+        nonlocal mock_refresh_token_called
+        client._auth_client.token = 'token'
+        client._auth_client.expiry = datetime.datetime(2018, 1, 1, 12, 30, 00)
+        mock_refresh_token_called += 1
+
+    client._auth_client.token = None
+    client._auth_client.expiry = None
+
+    monkeypatch.setattr(client._auth_client, 'refresh_token',
+                        mock_auth_refresh_token)
+    patch = 'gordon_gcp.clients.http.datetime.datetime'
+    mocker.patch(patch, conftest.MockDatetime)
+
+    resp_text = 'ohai'
+    with aioresponses() as mocked:
+        mocked.get(conftest.API_URL, status=200, body=resp_text)
+        mocked.get(conftest.API_URL, status=200, body=resp_text)
+        await client.request('get', conftest.API_URL)
+        await client.request('get', conftest.API_URL)
+
+    assert 1 == mock_refresh_token_called
+    assert 4 == len(caplog.records)
 
 
 @pytest.mark.asyncio

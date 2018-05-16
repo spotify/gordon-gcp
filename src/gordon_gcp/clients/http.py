@@ -73,11 +73,11 @@ class AIOConnection:
         """Check for validity of token, and refresh if none or expired."""
         is_valid = False
 
-        if self._auth_client.creds.token:
+        if self._auth_client.token:
             # Account for a token near expiration
             now = datetime.datetime.utcnow()
             skew = datetime.timedelta(seconds=60)
-            if self._auth_client.creds.expiry > (now + skew):
+            if self._auth_client.expiry > (now + skew):
                 is_valid = True
 
         if not is_valid:
