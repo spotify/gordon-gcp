@@ -41,10 +41,10 @@ To use:
     >>> auth_client = google_gcp.GAuthClient(keyfile=keyfile)
     # with Application Default Credentials
     >>> auth_client = google_gcp.GAuthClient()
-    >>> auth_clientcreds.token is None
+    >>> auth_client.token is None
     True
     >>> loop.run_until_complete(auth_client.refresh_token())
-    >>> auth_client.creds.token
+    >>> auth_client.token
     'c0ffe3'
 
 """
