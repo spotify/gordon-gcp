@@ -225,3 +225,24 @@ async def test_post_json_raises(client, monkeypatch, caplog):
     assert 1 == len(caplog.records)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('max_pages', [1, 2])
+async def test_get_all(mocker, max_pages):
+    number_of_calls = 0
+
+    class TestClient(http.AIOConnection):
+        async def get_json(self, url, params=None):
+            nonlocal number_of_calls
+            if number_of_calls < (max_pages - 1):
+                number_of_calls += 1
+                return {'data': 'data', 'nextPageToken': 'token'}
+            # last page doesn't include a nextPageToken
+            return {'data': 'final page'}
+
+    auth_client = mocker.Mock(auth.GAuthClient)
+    auth_client._session = aiohttp.ClientSession()
+    simple_paging_client = TestClient(auth_client)
+
+    results = await simple_paging_client.get_all(
+        conftest.API_BASE_URL, {})
+    assert max_pages == len(results)
