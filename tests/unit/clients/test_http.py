@@ -212,3 +212,16 @@ async def test_get_json(json_func, exp_resp, client, monkeypatch, caplog):
     assert exp_resp == resp
     assert 1 == mock_set_valid_token_called
     assert 2 == len(caplog.records)
+@pytest.mark.asyncio
+async def test_post_json_raises(client, monkeypatch, caplog):
+    """POST JSON data and json fails."""
+    post_json = {'hello': 'world'}
+    exp_msg = ('"data" and "json" request parameters can not be used '
+               'at the same time')
+    with pytest.raises(exceptions.GCPHTTPError, match=exp_msg):
+        await client.request(
+            'post', conftest.API_URL, data=post_json, json=post_json)
+
+    assert 1 == len(caplog.records)
+
+
