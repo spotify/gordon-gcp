@@ -18,3 +18,4 @@ keyfile = "/path/to/keyfiles/pubsub.json"
 [gcp.publisher]
 project = "my-dns-project"
 keyfile = "/path/to/keyfiles/dns.json"
+publish_wait_timeout = 10

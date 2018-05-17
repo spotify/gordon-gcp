@@ -30,8 +30,20 @@ class InvalidMessageError(GCPGordonError):
     """Consumed an invalid message from Google Pub/Sub."""
 
 
+class InvalidDNSZoneInMessageError(GCPGordonError):
+    """Raised when a message with an invalid DNS zone is consumed."""
+
+
 class GCPHTTPError(GCPGordonError):
     """An HTTP error occured."""
+
+
+class GCPHTTPConflictError(GCPHTTPError):
+    """An HTTP 409 was received."""
+
+
+class GCPHTTPNotFoundError(GCPHTTPError):
+    """An HTTP 404 was received."""
 
 
 class GCPAuthError(GCPGordonError):
@@ -40,3 +52,7 @@ class GCPAuthError(GCPGordonError):
 
 class GCPConfigError(GCPGordonError):
     """Improper or incomplete configuration for plugin."""
+
+
+class GCPPublishRecordTimeoutError(GCPGordonError):
+    """Time out error when attempting to publish records."""
