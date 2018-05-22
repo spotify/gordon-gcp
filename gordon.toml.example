@@ -7,6 +7,8 @@ handlers = ["syslog"]
 # Plugin Config
 [gcp]
 project = "my-gcp-project"
+dns_zone = "example.com."
+managed_zone = "example-zone"
 
 [gcp.enricher]
 keyfile = "/path/to/keyfiles/compute.json"
@@ -17,3 +19,4 @@ keyfile = "/path/to/keyfiles/pubsub.json"
 [gcp.publisher]
 project = "my-dns-project"
 keyfile = "/path/to/keyfiles/dns.json"
+publish_wait_timeout = 10

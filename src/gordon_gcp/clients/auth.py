@@ -19,9 +19,15 @@ Module to create a client interacting with Google Cloud authentication.
 An instantiated client is needed for interacting with any of the Google
 APIs via the :class:`.AIOConnection`.
 
-Only service account (JSON Web Tokens/JWT) authentication is currently
-supported. To setup a service account, follow `Google's docs <https://
-cloud.google.com/iam/docs/creating-managing-service-account-keys>`_.
+The GAuthClient supports both service account (JSON Web Tokens/JWT)
+authentication with keyfiles, and default credentials. To setup a
+service account, follow `Google's docs <https://cloud.google.com/iam/
+docs/creating-managing-service-account-keys>`_.  More information on
+default credentials can be found :ref:`here <app_default_creds>`. To
+setup default credentials, follow `Application Default Credentials`_.
+
+If a keyfile is not provided, the Application Default Credentials will
+be used.
 
 To use:
 
@@ -31,11 +37,14 @@ To use:
     >>> import google_gcp
     >>> loop = asyncio.get_event_loop()
     >>> keyfile = '/path/to/service_account_keyfile.json'
+    # with keyfile
     >>> auth_client = google_gcp.GAuthClient(keyfile=keyfile)
-    >>> auth_clientcreds.token is None
+    # with Application Default Credentials
+    >>> auth_client = google_gcp.GAuthClient()
+    >>> auth_client.token is None
     True
     >>> loop.run_until_complete(auth_client.refresh_token())
-    >>> auth_client.creds.token
+    >>> auth_client.token
     'c0ffe3'
 
 """
@@ -46,6 +55,7 @@ import logging
 import urllib.parse
 
 import aiohttp
+from google import auth as gauth
 from google.oauth2 import _client
 from google.oauth2 import service_account
 
@@ -91,6 +101,8 @@ class GAuthClient:
         self.expiry = None  # UTC time
 
     def _load_keyfile(self, keyfile):
+        if not keyfile:
+            return None
         try:
             with open(keyfile, 'r') as f:
                 return json.load(f)
@@ -109,9 +121,15 @@ class GAuthClient:
         return [self.SCOPE_TMPL_URL.format(scope=s) for s in scopes]
 
     def _load_credentials(self):
-        # TODO (lynn): FEATURE - load other credentials like app default
-        return service_account.Credentials.from_service_account_info(
-            self._keydata, scopes=self.scopes)
+        # load credentials with two options:
+        # 1. using key data 2. using Application Default Credentials
+        if self._keydata:
+            return service_account.Credentials.from_service_account_info(
+                self._keydata, scopes=self.scopes)
+
+        credentials, _ = gauth.default(
+            scopes=['https://www.googleapis.com/auth/userinfo.email'])
+        return credentials
 
     def _set_session(self, session, loop):
         if session is not None:
@@ -122,18 +140,29 @@ class GAuthClient:
         return session
 
     def _setup_token_request(self):
-        url = self._keydata.get('token_uri')
+        url = self.creds._token_uri
 
         headers = _utils.DEFAULT_REQUEST_HEADERS.copy()
         headers.update(
             {'Content-type': 'application/x-www-form-urlencoded'}
         )
-        body = {
-            'assertion': self.creds._make_authorization_grant_assertion(),
-            'grant_type': self.JWT_GRANT_TYPE,
-        }
+        body = self._setup_request_body()
         body = urllib.parse.urlencode(body)
         return url, headers, bytes(body.encode('utf-8'))
+
+    def _setup_request_body(self):
+        if self._keydata:
+            return {
+                'assertion': self.creds._make_authorization_grant_assertion(),
+                'grant_type': self.JWT_GRANT_TYPE,
+            }
+
+        return {
+                'refresh_token': self.creds._refresh_token,
+                'client_id': self.creds._client_id,
+                'client_secret': self.creds._client_secret,
+                'grant_type': 'refresh_token'
+            }
 
     async def refresh_token(self):
         """Refresh oauth access token attached to this HTTP session.

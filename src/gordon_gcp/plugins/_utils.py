@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright 2017-2018 Spotify AB
+# Copyright 2018 Spotify AB
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# Mainly for easier documentation reading
-from gordon_gcp.schema.parse import *  # noqa: F403
-from gordon_gcp.schema.validate import *  # noqa: F403
+"""Common utils shared among plugins."""
 
 
-__all__ = (
-    parse.__all__ +  # noqa: F405
-    validate.__all__  # noqa: F405
-)
+import logging
+
+
+class GEventMessageLogger(logging.LoggerAdapter):
+    def process(self, log_msg, kwargs):
+        log = f'[msg-{self.extra["msg_id"]}]: {log_msg}'
+        return log, kwargs
