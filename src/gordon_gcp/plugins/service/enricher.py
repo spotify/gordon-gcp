@@ -40,7 +40,7 @@ from gordon_gcp.clients import http
 from gordon_gcp.plugins import _utils
 
 
-__all__ = ('GCEEnricher', 'GCEEnricherBuilder',)
+__all__ = ('GCEEnricher', 'GCEEnricherBuilder')
 
 
 class GCEEnricherBuilder:

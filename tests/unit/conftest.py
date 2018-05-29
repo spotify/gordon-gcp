@@ -24,13 +24,45 @@ import logging
 
 import aiohttp
 import pytest
+from google.cloud import pubsub
 
 from gordon_gcp.clients import auth
-from gordon_gcp.plugins import event_consumer
+from gordon_gcp.plugins.service import event_consumer
 
 
 API_BASE_URL = 'https://example.com'
 API_URL = f'{API_BASE_URL}/v1/foo_endpoint'
+
+
+@pytest.fixture
+def fake_response_data():
+    return {
+        'rrsets': [
+            {
+                'name': 'a-test.example.net.',
+                'type': 'A',
+                'ttl': 300,
+                'rrdatas': [
+                    '10.1.2.3',
+                ]
+            }, {
+                'name': 'b-test.example.net.',
+                'type': 'CNAME',
+                'ttl': 600,
+                'rrdatas': [
+                    'a-test.example.net.',
+                ]
+            }, {
+                'name': 'c-test.example.net.',
+                'type': 'TXT',
+                'ttl': 300,
+                'rrdatas': [
+                    '"OHAI"',
+                    '"OYE"',
+                ]
+            }
+        ]
+    }
 
 
 @pytest.fixture
@@ -64,13 +96,26 @@ class MockDatetime(datetime.datetime):
 
 
 @pytest.fixture
+def config(fake_keyfile):
+    return {
+        'keyfile': fake_keyfile,
+        'project': 'test-example',
+        'topic': 'a-topic'
+    }
+
+
+@pytest.fixture
 async def auth_client(mocker, monkeypatch):
-    mock = mocker.Mock(auth.GAuthClient)
+    mock = mocker.Mock(auth.GAuthClient, autospec=True)
     mock.token = '0ldc0ffe3'
     mock._session = aiohttp.ClientSession()
+    mock.refresh_token = mocker.Mock(auth.GAuthClient.refresh_token)
+    mock.refresh_token.side_effect = _noop
     creds = mocker.Mock()
     mock.creds = creds
     monkeypatch.setattr('gordon_gcp.clients.auth.GAuthClient', mock)
+    monkeypatch.setattr(
+       'gordon_gcp.plugins.janitor.gpubsub_publisher.auth.GAuthClient', mock)
     yield mock
     await mock._session.close()
 
@@ -84,7 +129,7 @@ def caplog(caplog):
 
 
 @pytest.fixture
-def get_mock_coro(mocker):
+def create_mock_coro(mocker):
     """Create a mock-coro pair.
 
     The coro can be used to patch an async method while the mock can
@@ -127,3 +172,78 @@ def gevent_msg(mocker, audit_log_data):
 @pytest.fixture
 def channel_pair():
     return asyncio.Queue(), asyncio.Queue()
+
+
+async def _noop():
+    pass
+
+
+@pytest.fixture
+def get_gce_client(mocker, auth_client):
+    def _create_client(klass, *args, **kwargs):
+        client = klass(auth_client, *args, **kwargs)
+        mocker.patch.object(client, 'valid_token_set', _noop)
+        return client
+    return _create_client
+
+
+@pytest.fixture
+def gpubsub_publisher_client(mocker, monkeypatch):
+    mock = mocker.Mock(pubsub.PublisherClient, autospec=True)
+    patch = (
+        'gordon_gcp.plugins.janitor.gpubsub_publisher.pubsub.PublisherClient')
+    monkeypatch.setattr(patch, mock)
+    return mock
+
+
+@pytest.fixture
+def authority_config():
+    return {
+        'keyfile': 'keyfile',
+        'scopes': ['scope'],
+        'metadata_blacklist': [['key', 'val'], ['other_key', 'other_val']],
+        'project_blacklist': [],
+        'tag_blacklist': [],
+        'dns_zone': 'zone1.com',
+    }
+
+
+@pytest.fixture
+def instance_data():
+    return {
+        'id': '1',
+        'creationTimestamp': '2018-01-01 00:00:00.0000',
+        'name': 'instance-1',
+        'description': 'guc3-instance-1-54kj',
+        'tags': {
+            'items': ['some-tag'],
+            'fingerprint': ''
+        },
+        'machineType': 'n1-standard-1',
+        'status': 'RUNNING',
+        'statusMessage': 'RUNNING',
+        'zone': 'us-west9-z',
+        'canIpForward': False,
+        'networkInterfaces': [{
+            'network': 'network/url/string',
+            'subnetwork': 'subnetwork/url/string',
+            'networkIP': '192.168.0.1',
+            'name': 'test-network',
+            'accessConfigs': [{
+                'type': 'ONE_TO_ONE_NAT',
+                'name': 'EXTERNAL NAT',
+                'natIP': '1.1.1.1',
+                'kind': 'compute#accessConfig'
+            }],
+        }],
+        'metadata': {
+            'items': [
+                {'key': 'default', 'value': 'true'}
+            ],
+        },
+    }
+
+
+@pytest.fixture
+def emulator(monkeypatch):
+    monkeypatch.delenv('PUBSUB_EMULATOR_HOST', raising=False)

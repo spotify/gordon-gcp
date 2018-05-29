@@ -1,11 +1,11 @@
-<!-- This form is for bug reports and feature requests ONLY! 
+<!-- This form is for bug reports and feature requests ONLY!
 
 If you're looking for help, please find us on [Spotify's open source Slack organization](https://slackin.spotify.com) in the #gordon channel.
 -->
 
 **Is this a BUG REPORT or FEATURE REQUEST?**:
 
-> Uncomment only one, leave it on its own line: 
+> Uncomment only one, leave it on its own line:
 >
 > type: bug
 > type: feature
@@ -13,6 +13,8 @@ If you're looking for help, please find us on [Spotify's open source Slack organ
 **Environment**:
 <!-- Please include if you've confirmed one version of something works while another one does not -->
 - Gordon version(s):
+- Gordon-Janitor version(s):
+- Gordon GCP Plugin version(s):
 - Operating System(s):
 - Python version(s):
 

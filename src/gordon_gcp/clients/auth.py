@@ -63,7 +63,7 @@ from gordon_gcp import exceptions
 from gordon_gcp.clients import _utils
 
 
-__all__ = ('GAuthClient', )
+__all__ = ('GAuthClient',)
 
 
 class GAuthClient:

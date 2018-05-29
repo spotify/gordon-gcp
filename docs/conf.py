@@ -104,6 +104,9 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
 
+# Autodoc extention configuration
+autodoc_member_order = 'bysource'  # not sure why this doesn't work?
+
 # Avoid having to write `:py:` everywhere
 primary_domain = 'py'
 
@@ -174,5 +177,6 @@ man_pages = [
 # TODO (econchick@): Once gordon core docs are live, add here
 intersphinx_mapping = {
     'https://docs.python.org/3': None,
+    'https://googlecloudplatform.github.io/google-cloud-python/latest/': None,
     'https://aiohttp.readthedocs.io/en/stable/': None,
 }

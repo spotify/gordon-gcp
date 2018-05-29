@@ -1,6 +1,8 @@
-========================================================================
-``gordon-gcp``: GCP Plugin for Gordon, an Event-driven Cloud DNS Service
-========================================================================
+=========================================================
+``gordon-gcp``: GCP Plugins for Gordon and Gordon Janitor
+=========================================================
+
+*Event-driven Cloud DNS and DNS Reconciliation Services*
 
 .. include:: ../README.rst
    :start-after: desc-begin
@@ -11,19 +13,20 @@ Release v\ |release| (:doc:`What's new? <changelog>`).
 
 .. warning::
 
-    This is still in the planning phase and under active development. Gordon and this plugin should not be used in production, yet.
+    This is still in the planning phase and under active development. Gordon, Gordon Janitor, and these plugins should not be used in production yet.
 
 .. include:: ../README.rst
    :start-after: intro-begin
 
 
-User Guide
-==========
+User's Guide
+============
 
 .. toctree::
    :maxdepth: 1
 
-   config
+   config-service
+   config-janitor
    schema
    validate
    plugins

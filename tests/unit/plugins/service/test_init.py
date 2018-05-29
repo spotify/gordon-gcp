@@ -22,11 +22,11 @@ from google.cloud import pubsub
 from google.cloud.pubsub_v1.subscriber.policy import thread
 
 from gordon_gcp import exceptions
-from gordon_gcp import plugins
+from gordon_gcp.plugins import service
 
 
 #####
-# plugins.get_event_consumer tests
+# service.get_event_consumer tests
 #####
 @pytest.fixture
 def consumer_config(fake_keyfile):
@@ -44,14 +44,9 @@ def subscriber_client(mocker, monkeypatch):
     # what is actually returned from client.create_subscription
     mock_sub = mocker.Mock(thread.Policy)
     mock.return_value.create_subscription.return_value = mock_sub
-    patch = 'gordon_gcp.plugins.event_consumer.pubsub.SubscriberClient'
+    patch = 'gordon_gcp.plugins.service.event_consumer.pubsub.SubscriberClient'
     monkeypatch.setattr(patch, mock)
     return mock
-
-
-@pytest.fixture
-def emulator(monkeypatch):
-    monkeypatch.delenv('PUBSUB_EMULATOR_HOST', raising=False)
 
 
 @pytest.fixture
@@ -67,7 +62,7 @@ def exp_sub(consumer_config):
 
 
 # For some reason, the event loop for this test leaks over to
-# tests.unit.plugins.test_event_consumer:test_gpsthread_add_task so
+# tests.unit.plugins.service.test_event_consumer:test_gpsthread_add_task so
 # there's a warning of not awaiting the coroutine (which is expected).
 # Threads + asyncio + testing is hard.
 @pytest.mark.filterwarnings('ignore:coroutine')
@@ -79,7 +74,7 @@ def exp_sub(consumer_config):
 def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
                             exp_topic, auth_client, exp_sub, subscriber_client,
                             emulator, monkeypatch, event_loop):
-    """Happy path to initialize a Publisher client."""
+    """Happy path to initialize an Event Consumer client."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
     if local:
@@ -93,7 +88,7 @@ def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
     }
     if provide_loop:
         kwargs['loop'] = event_loop
-    client = plugins.get_event_consumer(**kwargs)
+    client = service.get_event_consumer(**kwargs)
 
     creds = None
     if not local:
@@ -135,7 +130,7 @@ def test_get_event_consumer_config_raises(config_key, exp_msg, consumer_config,
     consumer_config.pop(config_key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        client = plugins.get_event_consumer(consumer_config, success_chnl,
+        client = service.get_event_consumer(consumer_config, success_chnl,
                                             error_chnl)
         client._subscriber.create_subscription.assert_not_called()
 
@@ -154,7 +149,7 @@ def test_get_event_consumer_raises_topic(consumer_config, auth_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        plugins.get_event_consumer(consumer_config, success_chnl, error_chnl)
+        service.get_event_consumer(consumer_config, success_chnl, error_chnl)
         sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Topic "{exp_topic}" does not exist.')
@@ -172,7 +167,7 @@ def test_get_event_consumer_raises(consumer_config, auth_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        plugins.get_event_consumer(consumer_config, success_chnl, error_chnl)
+        service.get_event_consumer(consumer_config, success_chnl, error_chnl)
         sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Error trying to create subscription "{exp_sub}"')
@@ -189,7 +184,7 @@ def test_get_event_consumer_sub_exists(consumer_config, auth_client,
     sub_inst = subscriber_client.return_value
     sub_inst.create_subscription.side_effect = [exp]
 
-    client = plugins.get_event_consumer(consumer_config, success_chnl,
+    client = service.get_event_consumer(consumer_config, success_chnl,
                                         error_chnl)
 
     assert client._subscriber
@@ -198,7 +193,7 @@ def test_get_event_consumer_sub_exists(consumer_config, auth_client,
 
 
 #####
-# plugins.get_enricher tests
+# service.get_enricher tests
 #####
 @pytest.fixture
 def enricher_config(fake_keyfile):
@@ -211,14 +206,14 @@ def enricher_config(fake_keyfile):
 def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
                       retries):
     """Happy path to initialize an Enricher client."""
-    mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
+    mocker.patch('gordon_gcp.plugins.service.enricher.http.AIOConnection')
     enricher_config['retries'] = conf_retries
 
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
-    client = plugins.get_enricher(enricher_config, success_chnl, error_chnl)
+    client = service.get_enricher(enricher_config, success_chnl, error_chnl)
 
-    assert isinstance(client, plugins.enricher.GCEEnricher)
+    assert isinstance(client, service.enricher.GCEEnricher)
     assert client.config
     assert retries == client.config['retries']
     assert client.success_channel
@@ -233,12 +228,12 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
 def test_get_enricher_missing_config_raises(mocker, caplog, enricher_config,
                                             auth_client, config_key, exc_msg):
     """Raise when configuration key is missing."""
-    mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
+    mocker.patch('gordon_gcp.plugins.service.enricher.http.AIOConnection')
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
     enricher_config.pop(config_key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        plugins.get_enricher(enricher_config, success_chnl, error_chnl)
+        service.get_enricher(enricher_config, success_chnl, error_chnl)
 
     e.match('Invalid configuration:\n' + exc_msg)
     assert 1 == len(caplog.records)
@@ -247,12 +242,12 @@ def test_get_enricher_missing_config_raises(mocker, caplog, enricher_config,
 def test_get_enricher_config_bad_dns_zone(mocker, caplog, enricher_config,
                                           auth_client):
     """Raise when 'dns_zone' config value doesn't end with root zone."""
-    mocker.patch('gordon_gcp.plugins.enricher.http.AIOConnection')
+    mocker.patch('gordon_gcp.plugins.service.enricher.http.AIOConnection')
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
     enricher_config['dns_zone'] = 'example.com'
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        plugins.get_enricher(enricher_config, success_chnl, error_chnl)
+        service.get_enricher(enricher_config, success_chnl, error_chnl)
 
     exc_msg = 'A dns zone must be an FQDN and end with the root zone \("."\).'
     e.match('Invalid configuration:\n' + exc_msg)
