@@ -1,20 +1,24 @@
-=============================================================
-``gordon-gcp``: GCP Plugin for Gordon: Event-driven Cloud DNS
-=============================================================
+=========================================================
+``gordon-gcp``: GCP Plugins for Gordon and Gordon Janitor
+=========================================================
+
+*Event-driven Cloud DNS and DNS Reconciliation Services*
 
 .. desc-begin
 
-Google Cloud Platform (GCP) plugin for `gordon`_, an open-source, event-driven service for 3rd party DNS providers.
+Google Cloud Platform (GCP) plugin for `gordon`_, an open-source, event-driven service for 3rd party DNS providers, and for `gordon-janitor`_, an open-source service that checks Cloud DNS records against a source of truth (e.g. Compute Engine) and submits corrections to `gordon`_ via Google Pubsub.
 
-The ``gordon-gcp`` plugin adds optional support for the following:
+The ``gordon-gcp`` plugins add optional support for the following:
 
 * Creating, updating, and deleting records within `Google Cloud DNS`_
 * Consuming events from `Google Cloud Pub/Sub`_
-* Reads from `Google Compute Engine`_ for record information
+* Reading from `Google Compute Engine`_ for record information
+
+TODO (zephyr): what do the janitor plugins do?
 
 .. desc-end
 
-**NOTICE**: This is still in the planning phase and under active development. Gordon and this plugin should not be used in production, yet.
+**NOTICE**: This is still in the planning phase and under active development. Gordon, Gordon Janitor, and these plugins should not be used in production yet.
 
 .. intro-begin
 
@@ -23,6 +27,7 @@ Requirements
 
 * Python 3.6
 * Google Cloud Platform account
+* Service account JSON key that has relevant access (i.e. read and/or write) to the plugin service you want to use (e.g. Google Cloud DNS, Pub/Sub, or Compute Engine). See Google's `documentation`_ on how to create a key.
 
 Support for other Python versions may be added in the future.
 
@@ -104,3 +109,5 @@ This project adheres to the `Open Code of Conduct`_. By participating, you are e
 .. _`Google Cloud Pub/Sub`: https://cloud.google.com/pubsub/docs
 .. _`Google Compute Engine`: https://cloud.google.com/compute/docs
 .. _`gordon`: https://github.com/spotify/gordon
+.. _`gordon-janitor`: https://github.com/spotify/gordon-janitor
+.. _`documentation`: https://cloud.google.com/iam/docs/creating-managing-service-account-keys

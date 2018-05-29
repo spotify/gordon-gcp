@@ -29,3 +29,29 @@ DEFAULT_REQUEST_HEADERS = {
 # `requests` log format
 REQ_LOG_FMT = 'Request: "{method} {url}"'
 RESP_LOG_FMT = 'Response: "{method} {url}" {status} {reason}'
+
+
+class GPaginatorMixin:
+    """HTTP client mixin that aggregates data from paginated responses."""
+    async def list_all(self, url, params):
+        """Aggregate data from all pages of an API query.
+
+        Args:
+            url (str): Google API endpoint URL.
+            params (dict): URL query parameters.
+        Returns:
+            list: parsed query response results.
+        """
+        items = []
+        next_page_token = None
+
+        while True:
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            response = await self.get_json(url, params=params)
+
+            items.append(response)
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token:
+                break
+        return items

@@ -18,10 +18,11 @@ __author__ = 'Lynn Root'
 __version__ = '0.0.1.dev3'
 __license__ = 'Apache 2.0'
 __email__ = 'lynn@spotify.com'
-__description__ = 'GCP Plugin for Gordon: Event-driven Cloud DNS'
+__description__ = 'GCP Plugins for Gordon and Gordon Janitor'
 __uri__ = 'https://github.com/spotify/gordon-gcp'
 
 
+# Mainly for easier documentation reading
 from gordon_gcp.clients import *  # noqa: F403
 from gordon_gcp.exceptions import *  # noqa: F403
 from gordon_gcp.plugins import *  # noqa: F403

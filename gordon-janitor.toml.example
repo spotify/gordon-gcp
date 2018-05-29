@@ -1,0 +1,26 @@
+# Example for Gordon Janitor GCP-related Config
+[core]
+plugins = ["gcp.gdns"]
+
+[gcp]
+cleanup_timeout = 60
+
+[gcp.gdns]
+keyfile = "/path/to/dns-service-account.json"
+project = "gordon-dns-example"
+scopes = ["ndev.clouddns.readonly"]
+
+[gcp.gpubsub]
+keyfile = "/path/to/pubsub-service-account.json"
+project = "gordon-pubsub-example"
+topic = "dns-changes-topic"
+
+[gcp.gce]
+keyfile = "/path/to/crm-service-account.json"
+scopes = ["cloud-platform"]
+dns_zone = "example.com."
+metadata_blacklist = [["key", "val"], ["other_key", "other_val"]]
+tag_blacklist = []
+project_blacklist = []
+# This is passed directly to GCE's v1.instances.aggregatedList endpoint
+instance_filter = ""

@@ -20,7 +20,7 @@ import pytest  # NOQA
 from gordon import interfaces
 
 from gordon_gcp import exceptions
-from gordon_gcp.plugins import enricher
+from gordon_gcp.plugins.service import enricher
 
 
 @pytest.fixture
@@ -60,8 +60,8 @@ def test_implements_interface(config):
 
 
 @pytest.fixture
-def mock_http_client(mocker, get_mock_coro):
-    get_json_mock, get_json_coro = get_mock_coro()
+def mock_http_client(mocker, create_mock_coro):
+    get_json_mock, get_json_coro = create_mock_coro()
     http_client = mocker.Mock()
     mocker.patch.object(http_client, 'get_json', get_json_coro)
     mocker.patch.object(http_client, '_get_json_mock', get_json_mock)
@@ -69,9 +69,10 @@ def mock_http_client(mocker, get_mock_coro):
 
 
 @pytest.fixture
-def mock_async_sleep(mocker, get_mock_coro):
-    sleep_mock, sleep_coro = get_mock_coro()
-    mocker.patch('gordon_gcp.plugins.enricher.asyncio.sleep', sleep_coro)
+def mock_async_sleep(mocker, create_mock_coro):
+    sleep_mock, sleep_coro = create_mock_coro()
+    mocker.patch(
+        'gordon_gcp.plugins.service.enricher.asyncio.sleep', sleep_coro)
     return sleep_mock
 
 
