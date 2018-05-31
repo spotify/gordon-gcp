@@ -286,6 +286,13 @@ def mock_sleep(mocker):
 #####
 # GDNS Publisher Tests
 #####
+# For some reason, the event loop for this test leaks over to
+# tests.unit.plugins.service.test_event_consumer:test_gpsthread_add_task so
+# there's a warning of not awaiting the coroutine (which is expected).
+# Threads + asyncio + testing is hard.
+@pytest.mark.filterwarnings(
+    "ignore:coroutine 'test_gpsthread_add_task.<locals>.noop' was never "
+    "awaited")
 def test_implements_interface(config, auth_client):
     """GDNSPublisher implements IPublisherClient"""
     client = http.AIOConnection(auth_client=auth_client)
