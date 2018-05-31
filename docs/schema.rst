@@ -4,7 +4,7 @@ Schemas for Event Consuming
 Definitions
 -----------
 
-This plugin defines two types of schemas for consuming events by the :doc:`Google Pub/Sub Event Consumer plugin <plugins>`: :ref:`audit` and a :ref:`general`.
+This package defines two types of schemas for consuming events by the :doc:`Google Pub/Sub Event Consumer plugin <plugins>`: :ref:`audit` and a :ref:`general`.
 
 
 
