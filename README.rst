@@ -10,11 +10,17 @@ Google Cloud Platform (GCP) plugins for `gordon`_, an open-source, event-driven 
 
 The ``gordon-gcp`` plugins add optional support for the following:
 
-* Creating, updating, and deleting records within `Google Cloud DNS`_
+Service:
+
 * Consuming events from `Google Cloud Pub/Sub`_
 * Reading from `Google Compute Engine`_ for record information
+* Creating, updating, and deleting records within `Google Cloud DNS`_
 
-TODO (zephyr): what do the janitor plugins do?
+Janitor:
+
+* Reading instance lists from `Google Compute Engine`_
+* Comparing record sets from `Google Compute Engine`_ and `Google Cloud DNS`_
+* Publishing any required DNS changes to `Google Cloud Pub/Sub`_
 
 .. desc-end
 
