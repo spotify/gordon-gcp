@@ -6,7 +6,7 @@
 
 .. desc-begin
 
-Google Cloud Platform (GCP) plugin for `gordon`_, an open-source, event-driven service for 3rd party DNS providers, and for `gordon-janitor`_, an open-source service that checks Cloud DNS records against a source of truth (e.g. Compute Engine) and submits corrections to `gordon`_ via Google Pubsub.
+Google Cloud Platform (GCP) plugins for `gordon`_, an open-source, event-driven service for 3rd party DNS providers, and for `gordon-janitor`_, an open-source service that checks Cloud DNS records against a source of truth (e.g. Compute Engine) and submits corrections to `gordon`_ via Google Pubsub.
 
 The ``gordon-gcp`` plugins add optional support for the following:
 
