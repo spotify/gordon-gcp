@@ -61,11 +61,6 @@ def exp_sub(consumer_config):
     return f'projects/{consumer_config["project"]}/subscriptions/{subscription}'
 
 
-# For some reason, the event loop for this test leaks over to
-# tests.unit.plugins.service.test_event_consumer:test_gpsthread_add_task so
-# there's a warning of not awaiting the coroutine (which is expected).
-# Threads + asyncio + testing is hard.
-@pytest.mark.filterwarnings('ignore:coroutine')
 @pytest.mark.parametrize('local,provide_loop,topic,sub', [
     (True, True, 'a-topic',
      'projects/test-example/subscriptions/a-subscription'),
