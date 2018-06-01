@@ -99,7 +99,7 @@ setup(
         'gordon.plugins': [
             'gcp.enricher = gordon_gcp:get_enricher',
             'gcp.event_consumer = gordon_gcp:get_event_consumer',
-            'gcp.publisher = gordon_gcp:GDNSPublisher',
+            'gcp.publisher = gordon_gcp:get_gdns_publisher',
         ],
         'gordon_janitor.plugins': [
             'gcp.gce = gordon_gcp:get_authority',

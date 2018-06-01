@@ -30,15 +30,18 @@ import asyncio
 import datetime
 import json
 import logging
+import numbers
 import re
 
 import zope.interface
 from gordon import interfaces
 
 from gordon_gcp import exceptions
+from gordon_gcp.clients import auth
+from gordon_gcp.clients import http
 from gordon_gcp.plugins import _utils
 
-__all__ = ('GDNSPublisher',)
+__all__ = ('GDNSPublisher', 'GDNSPublisherBuilder')
 
 BASE_CHANGES_ENDPOINT = ('https://www.googleapis.com/dns/{version}/projects/'
                          '{project}/managedZones/{managedZone}/changes')
@@ -46,6 +49,112 @@ RESOURCE_RECORDS_ENDPOINT = ('https://www.googleapis.com/dns/v1/projects/'
                              '{project}/managedZones/{managedZone}/rrsets')
 # see https://cloud.google.com/dns/api/v1/changes#resource
 DNS_CHANGES_DONE = 'done'
+
+
+class GDNSPublisherBuilder:
+    """Build and configure a :class:`GDNSPublisher` object.
+
+    Args:
+        config (dict): Google Cloud DNS API related configuration.
+        success_channel (asyncio.Queue): Queue to place a successfully
+            published message to be further handled by the ``gordon``
+            core system.
+        error_channel (asyncio.Queue): Queue to place a message met
+            with errors to be further handled by the ``gordon`` core
+            system.
+        kwargs (dict): Additional keyword arguments to pass to the
+            publisher.
+    """
+    def __init__(self, config, success_channel, error_channel, **kwargs):
+        self.config = config
+        self.success_channel = success_channel
+        self.error_channel = error_channel
+        self.kwargs = kwargs
+        self.validate_config_funcs = [
+            self._validate_keyfile, self._validate_project,
+            self._validate_dns_zone, self._validate_managed_zone,
+            self._validate_publish_timeout, self._validate_default_ttl
+        ]
+
+    def _validate_keyfile(self, errors):
+        # TODO (lynn): keyfile won't be required once we support other
+        #              auth methods
+        if not self.config.get('keyfile'):
+            msg = ('The path to a Service Account JSON keyfile is required to '
+                   'authenticate for Google Cloud DNS.')
+            errors.append(msg)
+
+    def _validate_project(self, errors):
+        if not self.config.get('project'):
+            msg = 'The GCP project where Cloud DNS is located is required.'
+            errors.append(msg)
+
+    def _validate_dns_zone(self, errors):
+        if not self.config.get('dns_zone'):
+            msg = 'A dns zone is required to build correct A records.'
+            errors.append(msg)
+        elif not self.config.get('dns_zone', '').endswith('.'):
+            msg = ('A dns zone must be an FQDN and end with the root zone '
+                   '(".").')
+            errors.append(msg)
+
+    def _validate_managed_zone(self, errors):
+        if not self.config.get('managed_zone'):
+            msg = ('A managed zone is required to publish records to Google '
+                   'Cloud DNS.')
+            errors.append(msg)
+
+    def _validate_publish_timeout(self, errors):
+        if 'publish_wait_timeout' in self.config:
+            timeout = self.config.get('publish_wait_timeout')
+            if not isinstance(timeout, numbers.Number) or timeout < 0:
+                msg = '"publish_wait_timeout" must be a positive number."'
+                errors.append(msg)
+
+    def _validate_default_ttl(self, errors):
+        if not self.config.get('default_ttl'):
+            msg = ('A default TTL in seconds must be set for publishing '
+                   'records to Google Cloud DNS.')
+            errors.append(msg)
+        else:
+            try:
+                ttl = int(self.config.get('default_ttl'))
+            except (ValueError, TypeError):
+                msg = '"default_ttl" must be an integer.'
+                errors.append(msg)
+            else:
+                # NOTE: GDNS API accepts 0-4, but defaults to a minimum of 5.
+                if ttl < 5:
+                    msg = '"default_ttl" must be greater than 4.'
+                    errors.append(msg)
+
+    def _validate_config(self):
+        errors = []
+
+        for validate_func in self.validate_config_funcs:
+            validate_func(errors)
+
+        if errors:
+            exc_msg = 'Invalid configuration:\n'
+            for error in errors:
+                logging.error(error)
+                exc_msg += error + '\n'
+            raise exceptions.GCPConfigError(exc_msg)
+
+    def _init_auth_client(self):
+        scopes = self.config.get('scopes')
+        return auth.GAuthClient(
+            keyfile=self.config['keyfile'], scopes=scopes)
+
+    def _init_http_client(self):
+        auth_client = self._init_auth_client()
+        return http.AIOConnection(auth_client=auth_client)
+
+    def build_publisher(self):
+        self._validate_config()
+        http_client = self._init_http_client()
+        return GDNSPublisher(
+            self.config, self.success_channel, self.error_channel, http_client)
 
 
 @zope.interface.implementer(interfaces.IPublisherClient)
@@ -69,12 +178,12 @@ class GDNSPublisher:
         self.success_channel = success_channel
         self.error_channel = error_channel
         self.http_client = http_client
-        self.publish_wait_timeout = self.config['publish_wait_timeout']
+        self.publish_wait_timeout = self.config.get('publish_wait_timeout', 60)
         self.managed_zone = self.config['managed_zone']
         self.dns_zone = self.config['dns_zone']
         self.project = self.config['project']
         self.default_ttl = self.config['default_ttl']
-        self.api_version = self.config.get('version', 'v1')
+        self.api_version = self.config.get('api_version', 'v1')
         self.base_changes_url = BASE_CHANGES_ENDPOINT.format(
             version=self.api_version, project=self.project,
             managedZone=self.managed_zone)
