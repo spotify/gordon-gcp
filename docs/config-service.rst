@@ -48,22 +48,64 @@ Plugin Configuration
 ``[gcp.event_consumer]``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-All configuration options above in the general ``[gcp]`` may be used here. There are no specific Google Pub/Sub Consumer-related configuration options.
+All configuration options above in the general ``[gcp]`` may be used here. Additional Google Pub/Sub Consumer-related configuration options are:
 
+.. option:: topic="STR"
+
+    `Required`: A topic to which the Event Consumer client must subscribe.
+
+    For more information on Google Pub/Sub topics, please see `Google's docs on managing topics <topics>`_.
+
+.. option:: subscription="STR"
+
+    `Required`: A subscription to the ``topic`` from which the Event Consumer client will pull.
+
+    For more information on Google Pub/Sub subscriptions, please see `Google's docs on managing subscriptions <subscriptions>`_.
 
 ``[gcp.enricher]``
 ~~~~~~~~~~~~~~~~~~
 
-All configuration options above in the general ``[gcp]`` may be used here. There are no specific Google Compute Engine Enricher-related configuration options.
+All configuration options above in the general ``[gcp]`` may be used here. Additional Google Compute Engine configuration options are:
+
+
+.. option:: dns_zone="STR"
+
+    `Required`: DNS zone to validate the correctness of A records before publishing. Must be a fully-qualified domain name (FQDN), ending in ``.``, e.g. ``example.com.``.
 
 
 ``[gcp.publisher]``
 ~~~~~~~~~~~~~~~~~~~
 
-All configuration options above in the general ``[gcp]`` may be used here. There are no specific Google DNS Publisher-related configuration options.
+All configuration options above in the general ``[gcp]`` may be used here. Additional Google Cloud DNS configuration options are:
 
+.. describe:: dns_zone="STR"
+
+    `Required`: DNS zone to validate the correctness of A records before publishing. Must be a fully-qualified domain name (FQDN), ending in ``.``, e.g. ``example.com.``.
+
+.. option:: managed_zone="STR"
+
+    `Required`: The managed zone name in Google Cloud DNS where records are to be published.
+
+    To learn more about managed zones, please see `Google's docs on managed zones <managed_zones>`_.
+
+.. option:: default_ttl=INT
+
+    `Required`: The default TTL in seconds. This will be used if the publisher receives a record set to be published that does not yet have the TTL set. Must be greater than 4.
+
+.. option:: publish_wait_timeout=INT|FLOAT
+
+    `Optional`: Timeout in seconds for waiting for confirmation that changes have been successfully completed within Google Cloud DNS. Default is 60 seconds.
+
+.. option:: api_version="STR"
+
+    `Optional`: API version for both the `changes`_ endpoint and the `resource records`_ endpoint.
 
 
 .. _`gordon`: https://github.com/spotify/gordon
 .. _`keyfiles`: https://cloud.google.com/iam/docs/creating-managing-service-account-keys
 .. _`projects`: https://cloud.google.com/resource-manager/docs/creating-managing-projects
+.. _`topics`: https://cloud.google.com/pubsub/docs/admin#managing_topics
+.. _`subscriptions`: https://cloud.google.com/pubsub/docs/admin#managing_subscriptions
+.. _`managed_zones`: https://cloud.google.com/dns/zones/
+.. _`changes`: https://cloud.google.com/dns/api/v1/changes
+.. _`resource records`: https://cloud.google.com/dns/api/v1/resourceRecordSets/list
