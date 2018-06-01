@@ -1,5 +1,5 @@
-Configuration
-=============
+Service Configuration
+=====================
 
 Configuring Google Cloud Platform :doc:`plugins` for the `gordon`_ service.
 

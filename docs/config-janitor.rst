@@ -1,5 +1,5 @@
-Configuration
-=============
+Janitor Configuration
+=====================
 
 Configuring Google Cloud Platform :doc:`plugins` for the `gordon-janitor`_ service.
 
