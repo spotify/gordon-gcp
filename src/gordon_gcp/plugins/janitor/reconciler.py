@@ -137,11 +137,11 @@ class GDNSReconciler:
 
     Args:
         config (dict): Google Cloud DNS-related configuration.
-        dns_client (.GDNSClient): client to interact with Google Cloud
+        dns_client (.GDNSClient): Client to interact with Google Cloud
             DNS API.
-        rrset_channel (asyncio.Queue): queue from which to consume
+        rrset_channel (asyncio.Queue): Queue from which to consume
             record set messages to validate.
-        changes_channel (asyncio.Queue): queue to publish message to
+        changes_channel (asyncio.Queue): Queue to publish message to
             make corrections to Cloud DNS.
     """
 
