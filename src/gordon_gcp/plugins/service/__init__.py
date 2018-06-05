@@ -40,10 +40,10 @@ def get_event_consumer(config, success_channel, error_channel, **kwargs):
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
-        success_channel (asyncio.Queue): queue to place a successfully
+        success_channel (asyncio.Queue): Queue to place a successfully
             consumed message to be further handled by the ``gordon``
             core system.
-        error_channel (asyncio.Queue): queue to place a message met
+        error_channel (asyncio.Queue): Queue to place a message met
             with errors to be further handled by the ``gordon`` core
             system.
         kwargs (dict): Additional keyword arguments to pass to the
@@ -65,10 +65,10 @@ def get_enricher(config, success_channel, error_channel, **kwargs):
 
     Args:
         config (dict): Google Compute Engine API related configuration.
-        success_channel (asyncio.Queue): queue to place a successfully
+        success_channel (asyncio.Queue): Queue to place a successfully
             enriched message to be further handled by the ``gordon``
             core system.
-        error_channel (asyncio.Queue): queue to place a message met
+        error_channel (asyncio.Queue): Queue to place a message met
             with errors to be further handled by the ``gordon`` core
             system.
         kwargs (dict): Additional keyword arguments to pass to the

@@ -40,7 +40,7 @@ def get_gpubsub_publisher(config, changes_channel, **kw):
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
-        changes_channel (asyncio.Queue): queue to publish message to
+        changes_channel (asyncio.Queue): Queue to publish message to
             make corrections to Cloud DNS.
         kw (dict): Additional keyword arguments to pass to the
             Publisher.
@@ -61,9 +61,9 @@ def get_reconciler(config, rrset_channel, changes_channel, **kw):
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
-        rrset_channel (asyncio.Queue): queue from which to consume
+        rrset_channel (asyncio.Queue): Queue from which to consume
             record set messages to validate.
-        changes_channel (asyncio.Queue): queue to publish message to
+        changes_channel (asyncio.Queue): Queue to publish message to
             make corrections to Cloud DNS.
         kw (dict): Additional keyword arguments to pass to the
             Reconciler.
@@ -83,7 +83,7 @@ def get_authority(config, rrset_channel, **kwargs):
 
     Args:
         config (dict): GCEAuthority related configuration.
-        rrset_channel (asyncio.Queue): queue used for sending messages
+        rrset_channel (asyncio.Queue): Queue used for sending messages
             to the reconciler plugin.
         kw (dict): Additional keyword arguments to pass to the
             Authority.
