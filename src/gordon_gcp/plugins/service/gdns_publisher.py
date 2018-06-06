@@ -227,6 +227,7 @@ class GDNSPublisher:
 
         Raises:
             GCPHTTPConflictError on HTTP 409.
+            GCPHTTPNotFoundError on HTTP 404.
         """
         try:
             resp = await self.http_client.request(
@@ -298,6 +299,38 @@ class GDNSPublisher:
 
         return False
 
+    async def _dispatch_changes(self, resource_record, action, logger):
+        """Publish changes for one record, making sure they are completed.
+
+        Args:
+            resource_record (dict): A resource record to change.
+            action: The action to take (e.g. 'additions').
+            logger: An object to log with.
+
+        Raises:
+            GCPPublishRecordTimeoutError if publishing of records exceeds wait
+                timeout.
+        """
+        changes_to_publish = self._format_resource_record_changes(
+            action, resource_record)
+        try:
+            change_id = await self._publish_changes(changes_to_publish)
+        except exceptions.GCPHTTPConflictError as e:
+            msg = ('Conflict found when publishing records. Handling and '
+                   'retrying.')
+            logger.info(msg)
+            changes_to_publish = await self._handle_additions_conflict(
+                changes_to_publish)
+            change_id = await self._publish_changes(changes_to_publish)
+
+        change_complete = await self._changes_published(change_id)
+        if not change_complete:
+            msg = ('Timed out while waiting for DNS changes to transition '
+                   'to \'done\' status.')
+            logger.error(msg)
+            raise exceptions.GCPPublishRecordTimeoutError(msg)
+        logger.info('Records successfully published.')
+
     async def publish_changes(self, event_msg):
         """Publish changes extracted from the event message.
 
@@ -306,38 +339,19 @@ class GDNSPublisher:
                 Contains the changes to publish.
 
         Raises:
-            GCPPublishRecordTimeoutError if publishing of records exceeds wait
-                timeout.
+            InvalidDNSZoneInMessageError if the DNS zone of a resource record
+                does not match our configured zone.
         """
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': event_msg.msg_id})
         msg_logger.info('Publisher received new message.')
 
-        records_to_change = event_msg.data['resourceRecords']
-
-        for resource_record in records_to_change:
+        for resource_record in event_msg.data['resourceRecords']:
             record_name = resource_record['name']
             if not record_name.endswith('.' + self.dns_zone):
                 msg = f'Error when asserting zone for record: {record_name}.'
                 msg_logger.error(msg)
                 raise exceptions.InvalidDNSZoneInMessageError(msg)
 
-            changes_to_publish = self._format_resource_record_changes(
-                event_msg.data['action'], resource_record)
-            try:
-                change_id = await self._publish_changes(changes_to_publish)
-            except exceptions.GCPHTTPConflictError as e:
-                msg = ('Conflict found when publishing records. Handling and '
-                       'retrying.')
-                msg_logger.info(msg)
-                changes_to_publish = await self._handle_additions_conflict(
-                    changes_to_publish)
-                change_id = await self._publish_changes(changes_to_publish)
-
-            change_complete = await self._changes_published(change_id)
-            if not change_complete:
-                msg = ('Timed out while waiting for DNS changes to transition '
-                       'to \'done\' status.')
-                msg_logger.error(msg)
-                raise exceptions.GCPPublishRecordTimeoutError(msg)
-            msg_logger.info('Records successfully published.')
+            await self._dispatch_changes(
+                resource_record, event_msg.data['action'], msg_logger)
