@@ -101,6 +101,11 @@ setup(
             'gcp.event_consumer = gordon_gcp:get_event_consumer',
             'gcp.publisher = gordon_gcp:GDNSPublisher',
         ],
+        'gordon_janitor.plugins': [
+            'gcp.gce = gordon_gcp:get_authority',
+            'gcp.gdns = gordon_gcp:get_reconciler',
+            'gcp.gpubsub = gordon_gcp:get_gpubsub_publisher',
+        ],
     },
     include_package_data=True,
     classifiers=CLASSIFIERS,

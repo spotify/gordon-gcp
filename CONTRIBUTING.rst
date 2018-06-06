@@ -1,7 +1,7 @@
 How to Contribute
 =================
 
-Every open source project lives from the generous help by contributors that sacrifice their time and ``gordon`` and its plugins are no different.
+Every open source project lives from the generous help by contributors that sacrifice their time and ``gordon``, ``gordon-janitor``, and their plugins are no different.
 
 
 This project adheres to the `Open Code of Conduct`_. By participating, you are expected to honor this code. If the core project maintainers/owners feel that this Code of Conduct has been violated, we reserve the right to take appropriate action, including but not limited to: private or public reprimand; temporary or permanent ban from the project; request for public apology.

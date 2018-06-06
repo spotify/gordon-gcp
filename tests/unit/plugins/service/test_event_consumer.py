@@ -24,13 +24,13 @@ from google.cloud import pubsub_v1
 from gordon import interfaces
 
 from gordon_gcp import exceptions
-from gordon_gcp.plugins import event_consumer
+from gordon_gcp.plugins.service import event_consumer
 from gordon_gcp.schema import parse
 from gordon_gcp.schema import validate
 from tests.unit import conftest
 
 
-MOD_PATCH = 'gordon_gcp.plugins.event_consumer'
+MOD_PATCH = 'gordon_gcp.plugins.service.event_consumer'
 DATETIME_PATCH = f'{MOD_PATCH}.datetime.datetime'
 NEW_EV_PATCH = f'{MOD_PATCH}.asyncio.new_event_loop'
 

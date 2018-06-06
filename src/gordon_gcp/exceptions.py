@@ -18,12 +18,19 @@ from gordon import exceptions as core_exceptions
 
 
 __all__ = (
-    'GCPGordonError', 'InvalidMessageError', 'GCPAuthError', 'GCPHTTPError'
+    'GCPGordonError', 'GCPGordonJanitorError', 'InvalidMessageError',
+    'InvalidDNSZoneInMessageError', 'GCPHTTPError', 'GCPHTTPConflictError',
+    'GCPHTTPNotFoundError', 'GCPAuthError', 'GCPConfigError',
+    'GCPPublishRecordTimeoutError'
 )
 
 
 class GCPGordonError(core_exceptions.GordonError):
     """General Gordon GCP Plugin Error."""
+
+
+class GCPGordonJanitorError(core_exceptions.GordonError):
+    """General Gordon GCP Janitor Plugin Error."""
 
 
 class InvalidMessageError(GCPGordonError):

@@ -52,3 +52,29 @@ GCP Auth Client
 .. _app_default_creds:
 
 .. autofunction:: google.auth._default.default
+
+
+GCP Cloud DNS HTTP Client
+-------------------------
+
+.. automodule:: gordon_gcp.clients.gdns
+.. autoclass:: gordon_gcp.GDNSClient
+    :members:
+.. autoclass:: gordon_gcp.GCPResourceRecordSet
+    :members:
+
+
+GCRM Client
+-----------
+
+.. automodule:: gordon_gcp.clients.gcrm
+.. autoclass:: gordon_gcp.GCRMClient
+    :members:
+
+
+GCE Client
+----------
+
+.. automodule:: gordon_gcp.clients.gce
+.. autoclass:: gordon_gcp.GCEClient
+    :members:
