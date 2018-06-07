@@ -249,6 +249,9 @@ def test_get_enricher_config_bad_dns_zone(mocker, caplog, enricher_config,
     assert 1 == len(caplog.records)
 
 
+#####
+# service.get_gdns_publisher tests
+#####
 @pytest.fixture
 def publisher_config(fake_keyfile):
     return {
