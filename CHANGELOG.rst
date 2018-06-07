@@ -1,6 +1,16 @@
 Changelog
 =========
 
+0.0.1.dev5 (2018-06-07)
+-----------------------
+
+Changes
+~~~~~~~
+
+* Fix failure for core to instantiate GDNSPublisher plugin.
+* Internal API improvements.
+
+
 0.0.1.dev4 (2018-06-05)
 -----------------------
 

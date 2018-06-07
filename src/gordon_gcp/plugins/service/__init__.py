@@ -16,17 +16,18 @@
 
 from gordon_gcp.plugins.service import enricher
 from gordon_gcp.plugins.service import event_consumer
+from gordon_gcp.plugins.service import gdns_publisher
 # Mainly for easier documentation reading
-from gordon_gcp.plugins.service.enricher import *  # noqa: F403
-from gordon_gcp.plugins.service.event_consumer import *  # noqa: F403
-from gordon_gcp.plugins.service.gdns_publisher import *  # noqa: F403
+from gordon_gcp.plugins.service.enricher import *  # noqa: F401,F403
+from gordon_gcp.plugins.service.event_consumer import *  # noqa: F401,F403
+from gordon_gcp.plugins.service.gdns_publisher import *  # noqa: F401,F403
 
 
 __all__ = (
     enricher.__all__ +  # noqa: F405
     event_consumer.__all__ +  # noqa: F405
     gdns_publisher.__all__ +  # noqa: F405
-    ('get_event_consumer', 'get_enricher')
+    ('get_event_consumer', 'get_enricher', 'get_gdns_publisher')
 )
 
 
@@ -79,3 +80,28 @@ def get_enricher(config, success_channel, error_channel, **kwargs):
     builder = enricher.GCEEnricherBuilder(
         config, success_channel, error_channel, **kwargs)
     return builder.build_enricher()
+
+
+def get_gdns_publisher(config, success_channel, error_channel, **kwargs):
+    """Get a GDNSPublisher client.
+
+    A factory function that validates configuration and returns a
+    publisher client (:interface:`gordon.interfaces.IPublisherClient`)
+    provider.
+
+    Args:
+        config (dict): Google Cloud DNS API related configuration.
+        success_channel (asyncio.Queue): Queue to place a successfully
+            published message to be further handled by the ``gordon``
+            core system.
+        error_channel (asyncio.Queue): Queue to place a message met
+            with errors to be further handled by the ``gordon`` core
+            system.
+        kwargs (dict): Additional keyword arguments to pass to the
+            publisher.
+    Returns:
+        A :class:`GDNSPublisher` instance.
+    """
+    builder = gdns_publisher.GDNSPublisherBuilder(
+        config, success_channel, error_channel, **kwargs)
+    return builder.build_publisher()

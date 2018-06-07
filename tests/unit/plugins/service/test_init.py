@@ -247,3 +247,107 @@ def test_get_enricher_config_bad_dns_zone(mocker, caplog, enricher_config,
     exc_msg = 'A dns zone must be an FQDN and end with the root zone \("."\).'
     e.match('Invalid configuration:\n' + exc_msg)
     assert 1 == len(caplog.records)
+
+
+#####
+# service.get_gdns_publisher tests
+#####
+@pytest.fixture
+def publisher_config(fake_keyfile):
+    return {
+        'keyfile': fake_keyfile,
+        'dns_zone': 'example.com.',
+        'project': 'test-example',
+        'managed_zone': 'my-zone',
+        'default_ttl': 300,
+    }
+
+
+@pytest.mark.parametrize('conf_key,conf_value,expected', (
+    # publish_wait_timeout explicitly set
+    ('publish_wait_timeout', 30, 30),
+    # publish_wait_timeout not set
+    ('publish_wait_timeout', False, 60),
+    # api_version explicitly set
+    ('api_version', 'v1beta', 'v1beta'),
+    # # version not set
+    ('api_version', False, 'v1'),
+))
+def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
+                            publisher_config, auth_client):
+    """Happy path to initialize a GDNSPublisher client."""
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    mocker.patch(patch)
+
+    if conf_value:
+        publisher_config[conf_key] = conf_value
+
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+
+    client = service.get_gdns_publisher(
+        publisher_config, success_chnl, error_chnl)
+
+    assert isinstance(client, service.gdns_publisher.GDNSPublisher)
+    assert publisher_config == client.config
+    assert expected == getattr(client, conf_key)
+    assert success_chnl == client.success_channel
+    assert error_chnl == client.error_channel
+
+
+@pytest.mark.parametrize('conf_keys,exp_msg_snip', (
+    (('keyfile',), ('The path to a Service Account JSON keyfile is required '
+                    'to authenticate for Google Cloud DNS.')),
+    (('project',), 'The GCP project where Cloud DNS is located is required.'),
+    (('dns_zone',), 'A dns zone is required to build correct A records.'),
+    (('managed_zone',), ('A managed zone is required to publish records to '
+                         'Google Cloud DNS.')),
+    (('default_ttl',), ('A default TTL in seconds must be set for publishing '
+                        'records to Google Cloud DNS.')),
+    (('keyfile', 'project'), ('The path to a Service Account JSON keyfile is '
+                              'required to authenticate for Google Cloud DNS.\n'
+                              'The GCP project where Cloud DNS is located is '
+                              'required.\n'))
+))
+def test_get_gdns_publisher_raises(conf_keys, exp_msg_snip,
+                                   publisher_config, mocker, auth_client,
+                                   caplog):
+    """Raise when required config key(s) missing."""
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    mocker.patch(patch)
+
+    for conf_key in conf_keys:
+        publisher_config.pop(conf_key)
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+
+    with pytest.raises(exceptions.GCPConfigError) as e:
+        service.get_gdns_publisher(publisher_config, success_chnl, error_chnl)
+
+    e.match('Invalid configuration:\n' + exp_msg_snip)
+    assert len(conf_keys) == len(caplog.records)
+
+
+@pytest.mark.parametrize('conf_key,bad_value,exp_msg_snip', (
+    ('dns_zone', 'example.com', ('A dns zone must be an FQDN and end with the '
+                                 'root zone \("."\).')),
+    ('publish_wait_timeout', 'foo', ('"publish_wait_timeout" must be a '
+                                     'positive number.')),
+    ('publish_wait_timeout', -1, ('"publish_wait_timeout" must be a positive '
+                                  'number.')),
+    ('default_ttl', 'foo', '"default_ttl" must be an integer.'),
+    ('default_ttl', -1, '"default_ttl" must be greater than 4'),
+))
+def test_get_gdns_publisher_bad_config(conf_key, bad_value, exp_msg_snip,
+                                       publisher_config, mocker, auth_client,
+                                       caplog):
+    """Raise when config values are malformed."""
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    mocker.patch(patch)
+
+    publisher_config[conf_key] = bad_value
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+
+    with pytest.raises(exceptions.GCPConfigError) as e:
+        service.get_gdns_publisher(publisher_config, success_chnl, error_chnl)
+
+    e.match('Invalid configuration:\n' + exp_msg_snip)
+    assert 1 == len(caplog.records)
