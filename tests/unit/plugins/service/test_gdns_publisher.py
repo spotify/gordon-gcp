@@ -329,7 +329,7 @@ async def test_publish_changes_handles_update_conflict(
         all_existing_zone_records, rrsets_url, changes_url,
         initial_changes_req, handled_conflict_changes_req,
         initial_changes_pending_json_resp, initial_changes_resp, caplog):
-    """Ensure exception raised on invalid zone"""
+    """Ensure changes with update conflicts are successfully published"""
     expected_change_id = json.loads(initial_changes_pending_json_resp)['id']
     event_message.data['resourceRecords'] = initial_changes_req['additions']
     gdns_publisher_instance.http_client._request_post_mock.side_effect = [
@@ -387,7 +387,7 @@ http_exceptions = [
 @pytest.mark.parametrize('status_code,http_exception', http_exceptions)
 @pytest.mark.asyncio
 async def test__publish_changes_http_exceptions_raised(
-        gdns_publisher_instance, initial_changes_req, status_code,
+        gdns_publisher_instance, initial_changes_req, changes_url, status_code,
         http_exception):
     """Exception is raised when getting HTTP error from Google API."""
 
@@ -395,20 +395,21 @@ async def test__publish_changes_http_exceptions_raised(
         exceptions.GCPHTTPError(status_code)
 
     with pytest.raises(http_exception):
-        await gdns_publisher_instance._publish_changes(initial_changes_req)
+        await gdns_publisher_instance._publish_changes(initial_changes_req,
+                                                       changes_url)
 
 
 @pytest.mark.asyncio
 async def test__publish_changes_returns_change_id(
         gdns_publisher_instance, initial_changes_req,
-        initial_changes_pending_json_resp):
+        changes_url, initial_changes_pending_json_resp):
     """Ensure change ID is returned from Google API."""
     expected_change_id = json.loads(initial_changes_pending_json_resp)['id']
     gdns_publisher_instance.http_client._request_post_mock.return_value = (
         initial_changes_pending_json_resp)
 
     change_id = await gdns_publisher_instance._publish_changes(
-        initial_changes_req)
+        initial_changes_req, changes_url)
 
     assert expected_change_id == change_id
 
@@ -422,11 +423,12 @@ conflict_types = [
 @pytest.mark.parametrize('existing,output', conflict_types)
 @pytest.mark.asyncio
 async def test__handle_additions_conflict(
-        gdns_publisher_instance, existing, initial_changes_req, output):
+        gdns_publisher_instance, existing, initial_changes_req, rrsets_url,
+        output):
     """Test correctly handling an additions conflict."""
     gdns_publisher_instance.http_client._get_all_mock.return_value = existing
 
     changes = await gdns_publisher_instance._handle_additions_conflict(
-        initial_changes_req)
+        initial_changes_req, rrsets_url)
 
     assert changes == output
