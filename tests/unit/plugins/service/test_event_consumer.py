@@ -256,7 +256,7 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
         pubsub_msg, audit_log_data, 'audit-log')
     assert 1 == consumer.success_channel.qsize()
     assert event_msg is await consumer.success_channel.get()
-    assert 5 == len(caplog.records)
+    assert 4 == len(caplog.records)
 
 
 @pytest.mark.asyncio
@@ -338,25 +338,6 @@ def test_get_and_validate_pubsub_msg_schema(mocker, pubsub_msg, validator,
     validator.validate.assert_has_calls(calls)
 
     assert expected == schema
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('init_phase', (None, 'emo'))
-async def test_update_phase(init_phase, mocker, consumer, pubsub_msg):
-    """Phase of a GEventMessage instance is updated."""
-    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
-    event_msg = event_consumer.GEventMessage(pubsub_msg, {}, phase=init_phase)
-
-    assert init_phase == event_msg.phase  # sanity check
-    await consumer.update_phase(event_msg)
-
-    assert 'consume' == event_msg.phase
-    exp_entry = {
-        'timestamp': '2018-01-01T11:30:00.000000Z',
-        'plugin': 'consume',
-        'message': f'Updated phase from "{init_phase}" to "consume".',
-    }
-    assert exp_entry in event_msg.history_log
 
 
 @pytest.mark.asyncio

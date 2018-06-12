@@ -211,8 +211,6 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
     assert isinstance(client, service.enricher.GCEEnricher)
     assert client.config
     assert retries == client.config['retries']
-    assert client.success_channel
-    assert client.error_channel
     assert client._http_client
 
 
@@ -290,8 +288,6 @@ def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
     assert isinstance(client, service.gdns_publisher.GDNSPublisher)
     assert publisher_config == client.config
     assert expected == getattr(client, conf_key)
-    assert success_chnl == client.success_channel
-    assert error_chnl == client.error_channel
 
 
 @pytest.mark.parametrize('conf_keys,exp_msg_snip', (

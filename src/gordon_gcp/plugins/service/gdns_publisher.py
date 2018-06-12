@@ -176,21 +176,12 @@ class GDNSPublisher:
 
     def __init__(self, config, success_channel, error_channel, http_client):
         self.config = config
-        self.success_channel = success_channel
-        self.error_channel = error_channel
         self.http_client = http_client
         self.publish_wait_timeout = self.config.get('publish_wait_timeout', 60)
         self.project = self.config['project']
         self.default_ttl = self.config['default_ttl']
         self.api_version = self.config.get('api_version', 'v1')
         self._logger = logging.getLogger('')
-
-    # TODO: This will be eventually moved to GEventMessage
-    async def update_phase(self, event_msg, phase=None):
-        old_phase = event_msg.phase
-        event_msg.phase = phase or self.phase
-        msg = f'Updated phase from "{old_phase}" to "{event_msg.phase}".'
-        event_msg.append_to_history(msg, self.phase)
 
     def _format_resource_record_changes(self, action, resource_record):
         """Return dict containing the changes to be made.
