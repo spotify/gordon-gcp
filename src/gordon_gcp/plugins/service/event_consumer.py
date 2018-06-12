@@ -317,23 +317,6 @@ class GPSEventConsumer:
 
         msg_logger.info(f'Message is done processing.')
 
-    async def update_phase(self, event_msg, phase=None):
-        """Update event message phase to completed phase.
-
-        Updating the message's phase signals that the message has
-        completed this phase, and the gordon core router logic should
-        pass it onto the next phase (e.g. "enrich").
-
-        Args:
-            event_msg (GEventMessage): event message to update.
-            phase (str): Optional: phase to update message. Defaults to
-                "consume".
-        """
-        old_phase = event_msg.phase
-        event_msg.phase = phase or self.phase
-        msg = f'Updated phase from "{old_phase}" to "{event_msg.phase}".'
-        event_msg.append_to_history(msg, self.phase)
-
     def _create_gevent_msg(self, pubsub_msg, data, schema):
         log_entry = f'Created a "{schema}" message.'
         msg = GEventMessage(pubsub_msg, data)
@@ -375,12 +358,6 @@ class GPSEventConsumer:
         event_msg_data = self._parser.parse(data, schema)
         event_msg = self._create_gevent_msg(
             pubsub_msg, event_msg_data, schema)
-
-        # if the message has resource records, assume it has all info
-        # it needs to be published, and therefore is already enriched
-        phase = 'enrich' if event_msg_data['resourceRecords'] else 'consume'
-        msg_logger.debug(f'Updating message phase to "{phase}".')
-        await self.update_phase(event_msg, phase=phase)
 
         msg_logger.debug(f'Adding message to the success channel.')
         await self.success_channel.put(event_msg)

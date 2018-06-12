@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import json
 
 import pytest
@@ -23,7 +22,8 @@ from gordon import interfaces
 
 from gordon_gcp import exceptions
 from gordon_gcp.clients import http
-from gordon_gcp.plugins.service import event_consumer, gdns_publisher
+from gordon_gcp.plugins.service import event_consumer
+from gordon_gcp.plugins.service import gdns_publisher
 
 
 #####
@@ -267,8 +267,8 @@ def mock_http_client(mocker, create_mock_coro):
 
 
 @pytest.fixture
-def gdns_publisher_instance(mock_http_client, config):
-    success, error = asyncio.Queue(), asyncio.Queue()
+def gdns_publisher_instance(mocker, mock_http_client, config):
+    success, error = mocker.Mock(), mocker.Mock()
     pb = gdns_publisher.GDNSPublisher(config, success, error, mock_http_client)
     return pb
 
@@ -293,19 +293,17 @@ def mock_sleep(mocker):
 @pytest.mark.filterwarnings(
     "ignore:coroutine 'test_gpsthread_add_task.<locals>.noop' was never "
     "awaited")
-def test_implements_interface(config, auth_client):
+def test_implements_interface(mocker, config, auth_client):
     """GDNSPublisher implements IPublisherClient"""
     client = http.AIOConnection(auth_client=auth_client)
 
-    success, error = asyncio.Queue(), asyncio.Queue()
+    success, error = mocker.Mock(), mocker.Mock()
     plugin = gdns_publisher.GDNSPublisher(config, success, error, client)
 
     assert interfaces.IPublisherClient.providedBy(plugin)
     assert interfaces.IPublisherClient.implementedBy(
         gdns_publisher.GDNSPublisher)
     assert config is plugin.config
-    assert success is plugin.success_channel
-    assert error is plugin.error_channel
     assert 'publish' == plugin.phase
 
 

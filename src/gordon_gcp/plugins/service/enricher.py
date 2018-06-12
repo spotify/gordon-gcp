@@ -140,8 +140,6 @@ class GCEEnricher:
 
     def __init__(self, config, http_client, success_channel, error_channel):
         self.config = config
-        self.success_channel = success_channel
-        self.error_channel = error_channel
         self._http_client = http_client
         self._logger = logging.getLogger('')
 
@@ -220,40 +218,25 @@ class GCEEnricher:
             event_message (.GEventMessage): message requiring
                 additional information.
         """
+
+        # if the message has resource records, assume it has all info
+        # it needs to be published, and therefore is already enriched
+        if event_message.data['resourceRecords']:
+            msg = 'Message already enriched, skipping phase.'
+            event_message.append_to_history(msg, self.phase)
+            return
+
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': event_message.msg_id})
-        try:
-            instance_data = await self._poll_for_instance_data(
-                event_message.data['resourceName'], msg_logger)
-            records = await self._create_rrecords(
-                event_message.data, instance_data, msg_logger)
-        except exceptions.GCPGordonError as e:
-            msg = ('Encountered error while enriching message, sending message'
-                   f' to error channel: {e}.')
-            msg_logger.warning(msg)
-            event_message.append_to_history(msg, self.phase)
-            await self.error_channel.put(event_message)
-            return
+
+        instance_data = await self._poll_for_instance_data(
+            event_message.data['resourceName'], msg_logger)
+        records = await self._create_rrecords(
+            event_message.data, instance_data, msg_logger)
+
         msg_logger.debug(f'Enriched with resource record(s): {records}')
         event_message.data['resourceRecords'].extend(records)
 
         added_records = event_message.data['resourceRecords']
         msg = f'Enriched msg with {len(added_records)} resource record(s).'
         event_message.append_to_history(msg, self.phase)
-
-        await self.update_phase(event_message, 'publish')
-        await self.success_channel.put(event_message)
-
-    async def update_phase(self, event_message, phase=None):
-        """
-        Update message's phase to next phase.
-
-        Args:
-            event_message (.GEventMessage): successfully processed message.
-            phase (str): next processing phase.
-        """
-        old_phase = event_message.phase
-        new_phase = phase or self.phase
-        event_message.phase = new_phase
-        msg = f'Updated phase from "{old_phase}" to "{new_phase}".'
-        event_message.append_to_history(msg, new_phase)
