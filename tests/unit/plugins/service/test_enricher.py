@@ -44,13 +44,12 @@ def config(fake_keyfile):
     }
 
 
-def test_implements_interface(mocker, config):
-    """GCEEnricher implements IEnricherClient"""
-    success, error = mocker.Mock(), mocker.Mock()
-    client = enricher.GCEEnricher(config, None, success, error)
+def test_implements_interface(mocker, config, metrics):
+    """GCEEnricher implements IMessageHandler"""
+    client = enricher.GCEEnricher(config, None, metrics)
 
-    assert interfaces.IEnricherClient.providedBy(client)
-    assert interfaces.IEnricherClient.implementedBy(enricher.GCEEnricher)
+    assert interfaces.IMessageHandler.providedBy(client)
+    assert interfaces.IMessageHandler.implementedBy(enricher.GCEEnricher)
     assert config is client.config
     assert 'enrich' == client.phase
 
@@ -73,12 +72,12 @@ def mock_async_sleep(mocker, create_mock_coro):
 
 
 @pytest.mark.asyncio
-async def test_process_doesnt_need_processing(mocker, caplog, config,
-                                              gevent_msg):
-    gce_enricher = enricher.GCEEnricher(config, mocker.Mock(), None, None)
+async def test_handle_message_doesnt_need_enriching(mocker, caplog, config,
+                                                    gevent_msg):
+    gce_enricher = enricher.GCEEnricher(config, mocker.Mock(), None)
     gevent_msg.data['resourceRecords'] = [mocker.Mock()]
     expected_msg = 'Message already enriched, skipping phase.'
-    await gce_enricher.process(gevent_msg)
+    await gce_enricher.handle_message(gevent_msg)
     assert expected_msg == gevent_msg.history_log[0]['message']
     assert 0 == len(caplog.records)
 
@@ -87,21 +86,18 @@ async def test_process_doesnt_need_processing(mocker, caplog, config,
     (0, 3),
     (2, 5)])
 @pytest.mark.asyncio
-async def test_process_event_msg(mocker, config, gevent_msg, mock_async_sleep,
-                                 mock_http_client, caplog, instance_data,
-                                 sleep_calls, logs_logged):
+async def test_handle_message_event_msg(
+        mocker, config, gevent_msg, mock_async_sleep, mock_http_client, caplog,
+        instance_data, sleep_calls, logs_logged, metrics):
     """Successfully enrich event message."""
     instance_mocked_data = []
     for i in range(sleep_calls):
         instance_mocked_data.append({})
     instance_mocked_data.append(instance_data)
     mock_http_client._get_json_mock.side_effect = instance_mocked_data
-    mock_channel = mocker.Mock()
+    gce_enricher = enricher.GCEEnricher(config, mock_http_client, metrics)
 
-    gce_enricher = enricher.GCEEnricher(config, mock_http_client,
-                                        mock_channel, mock_channel)
-
-    await gce_enricher.process(gevent_msg)
+    await gce_enricher.handle_message(gevent_msg)
 
     expected_history_msg = 'Enriched msg with 1 resource record(s).'
     assert expected_history_msg == gevent_msg.history_log[0]['message']
@@ -127,19 +123,16 @@ async def test_process_event_msg(mocker, config, gevent_msg, mock_async_sleep,
     (exceptions.GCPHTTPError('404 error'), 0, 1, 'GCPHTTPError: 404 error'),
     ([{}] * 5, 4, 5, 'KeyError: \'networkInterfaces\'')])
 @pytest.mark.asyncio
-async def test_process_event_msg_failures(mocker, config, gevent_msg,
-                                          mock_async_sleep, mock_http_client,
-                                          caplog, response, sleep_calls,
-                                          logs_logged, err_msg):
+async def test_handle_message_event_msg_failures(
+        mocker, config, gevent_msg, mock_async_sleep, mock_http_client,
+        caplog, response, sleep_calls, logs_logged, err_msg, metrics):
     """Raise error while enriching event message."""
     mock_http_client._get_json_mock.side_effect = response
-    mock_channel = mocker.Mock()
-    gce_enricher = enricher.GCEEnricher(config, mock_http_client, mock_channel,
-                                        mock_channel)
+    gce_enricher = enricher.GCEEnricher(config, mock_http_client, metrics)
     gevent_msg.phase = 'enrich'
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        await gce_enricher.process(gevent_msg)
+        await gce_enricher.handle_message(gevent_msg)
 
     assert 'enrich' == gevent_msg.phase
     assert sleep_calls == mock_async_sleep.call_count

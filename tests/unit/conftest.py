@@ -247,3 +247,8 @@ def instance_data():
 @pytest.fixture
 def emulator(monkeypatch):
     monkeypatch.delenv('PUBSUB_EMULATOR_HOST', raising=False)
+
+
+@pytest.fixture
+def metrics(mocker):
+    return mocker.Mock()

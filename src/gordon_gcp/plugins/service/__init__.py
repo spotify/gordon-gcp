@@ -31,13 +31,15 @@ __all__ = (
 )
 
 
-def get_event_consumer(config, success_channel, error_channel, **kwargs):
+def get_event_consumer(config, success_channel, error_channel, metrics,
+                       **kwargs):
     """Get a GPSEventConsumer client.
 
     A factory function that validates configuration, creates schema
     validator and parser clients, creates an auth and a pubsub client,
     and returns an event consumer (:interface:`gordon.interfaces.
-    IEventConsumerClient`) provider.
+    IRunnable` and :interface:`gordon.interfaces.IMessageHandler`)
+    provider.
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
@@ -47,61 +49,52 @@ def get_event_consumer(config, success_channel, error_channel, **kwargs):
         error_channel (asyncio.Queue): Queue to place a message met
             with errors to be further handled by the ``gordon`` core
             system.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         kwargs (dict): Additional keyword arguments to pass to the
             event consumer.
     Returns:
         A :class:`GPSEventConsumer` instance.
     """
     builder = event_consumer.GPSEventConsumerBuilder(
-        config, success_channel, error_channel, **kwargs)
+        config, success_channel, error_channel, metrics, **kwargs)
     return builder.build_event_consumer()
 
 
-def get_enricher(config, success_channel, error_channel, **kwargs):
+def get_enricher(config, metrics, **kwargs):
     """Get a GCEEnricher client.
 
     A factory function that validates configuration and returns an
-    enricher client (:interface:`gordon.interfaces.IEnricherClient`)
+    enricher client (:interface:`gordon.interfaces.IMessageHandler`)
     provider.
 
     Args:
         config (dict): Google Compute Engine API related configuration.
-        success_channel (asyncio.Queue): Queue to place a successfully
-            enriched message to be further handled by the ``gordon``
-            core system.
-        error_channel (asyncio.Queue): Queue to place a message met
-            with errors to be further handled by the ``gordon`` core
-            system.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         kwargs (dict): Additional keyword arguments to pass to the
             enricher.
     Returns:
         A :class:`GCEEnricher` instance.
     """
     builder = enricher.GCEEnricherBuilder(
-        config, success_channel, error_channel, **kwargs)
+        config, metrics, **kwargs)
     return builder.build_enricher()
 
 
-def get_gdns_publisher(config, success_channel, error_channel, **kwargs):
+def get_gdns_publisher(config, metrics, **kwargs):
     """Get a GDNSPublisher client.
 
     A factory function that validates configuration and returns a
-    publisher client (:interface:`gordon.interfaces.IPublisherClient`)
+    publisher client (:interface:`gordon.interfaces.IMessageHandler`)
     provider.
 
     Args:
         config (dict): Google Cloud DNS API related configuration.
-        success_channel (asyncio.Queue): Queue to place a successfully
-            published message to be further handled by the ``gordon``
-            core system.
-        error_channel (asyncio.Queue): Queue to place a message met
-            with errors to be further handled by the ``gordon`` core
-            system.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         kwargs (dict): Additional keyword arguments to pass to the
             publisher.
     Returns:
         A :class:`GDNSPublisher` instance.
     """
     builder = gdns_publisher.GDNSPublisherBuilder(
-        config, success_channel, error_channel, **kwargs)
+        config, metrics, **kwargs)
     return builder.build_publisher()

@@ -57,10 +57,9 @@ class GCEEnricherBuilder:
         kwargs (dict): Additional keyword arguments to pass to the
             enricher.
     """
-    def __init__(self, config, success_channel, error_channel, **kwargs):
+    def __init__(self, config, metrics, **kwargs):
         self.config = config
-        self.success_channel = success_channel
-        self.error_channel = error_channel
+        self.metrics = metrics
         self.kwargs = kwargs
         self._validate_config()
         self.http_client = self._init_http_client()
@@ -118,11 +117,10 @@ class GCEEnricherBuilder:
 
     def build_enricher(self):
         return GCEEnricher(
-            self.config, self.http_client, self.success_channel,
-            self.error_channel)
+            self.config, self.http_client, self.metrics, **self.kwargs)
 
 
-@zope.interface.implementer(interfaces.IEnricherClient)
+@zope.interface.implementer(interfaces.IMessageHandler)
 class GCEEnricher:
     """Get needed instance information from Google Compute Engine.
 
@@ -138,9 +136,10 @@ class GCEEnricher:
     """
     phase = 'enrich'
 
-    def __init__(self, config, http_client, success_channel, error_channel):
+    def __init__(self, config, http_client, metrics, **kwargs):
         self.config = config
         self._http_client = http_client
+        self.metrics = metrics
         self._logger = logging.getLogger('')
 
     def _check_instance_data(self, instance_data):
@@ -205,7 +204,7 @@ class GCEEnricher:
                 fqdn, external_ip, default_ttl, msg_logger)
         ]
 
-    async def process(self, event_message):
+    async def handle_message(self, event_message):
         """
         Enrich message with extra context and send it to the publisher.
 

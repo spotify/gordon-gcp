@@ -139,17 +139,19 @@ def subscriber_client(mocker, monkeypatch):
     return mock.subscribe.return_value
 
 
-def test_event_consumer_default(subscriber_client, validator, parser,
-                                event_loop, channel_pair):
+def test_event_consumer_default(mocker, subscriber_client, validator, parser,
+                                event_loop, channel_pair, metrics):
     """GPSEventConsumer implements IEventConsumerClient"""
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
     success, error = channel_pair
     client = event_consumer.GPSEventConsumer(
-        config, subscriber_client, validator, parser, success, error,
+        config, success, error, metrics, subscriber_client, validator, parser,
         event_loop)
 
-    assert interfaces.IEventConsumerClient.providedBy(client)
-    assert interfaces.IEventConsumerClient.implementedBy(
+    assert interfaces.IRunnable.providedBy(client)
+    assert interfaces.IRunnable.implementedBy(event_consumer.GPSEventConsumer)
+    assert interfaces.IMessageHandler.providedBy(client)
+    assert interfaces.IMessageHandler.implementedBy(
         event_consumer.GPSEventConsumer)
     assert subscriber_client is client._subscriber
     assert config['subscription'] is client._subscription
@@ -157,25 +159,27 @@ def test_event_consumer_default(subscriber_client, validator, parser,
     assert ['schema1', 'schema2'] == list(client._message_schemas)
     assert success is client.success_channel
     assert error is client.error_channel
-    assert 'consume' == client.phase
+    assert metrics is client.metrics
+    assert 'consume' == client.start_phase
+    assert 'cleanup' == client.phase
     assert event_loop is client._loop
 
 
 @pytest.fixture
-def consumer(subscriber_client, validator, event_loop, channel_pair):
+def consumer(subscriber_client, validator, event_loop, channel_pair, metrics):
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
     success, error = channel_pair
     parser = parse.MessageParser()
     client = event_consumer.GPSEventConsumer(
-        config, subscriber_client, validator, parser, success, error,
+        config, success, error, metrics, subscriber_client, validator, parser,
         event_loop)
     return client
 
 
 @pytest.mark.asyncio
-async def test_start(consumer):
+async def test_run(consumer):
     """Consumer starts consuming from a Pub/Sub subscription."""
-    await consumer.start()
+    await consumer.run()
 
     consumer._subscriber.open.assert_called_once_with(
         consumer._thread_pubsub_msg)
@@ -183,7 +187,6 @@ async def test_start(consumer):
 
 def test_manage_subs(consumer):
     consumer._manage_subs()
-
     exp_callback = consumer._thread_pubsub_msg
     consumer._subscriber.open.assert_called_once_with(exp_callback)
 
@@ -291,14 +294,9 @@ async def test_handle_pubsub_msg_invalid(mocker, monkeypatch, consumer, caplog,
     assert 3 == len(caplog.records)
 
 
-def test_create_gevent_msg(mocker, pubsub_msg, raw_msg_data, validator):
+def test_create_gevent_msg(mocker, pubsub_msg, raw_msg_data, consumer):
     """Create an instance of GEventMessage with a pubsub message."""
     mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
-    config = {'subscription': 'foo'}
-    # bare bones consumer
-    consumer = event_consumer.GPSEventConsumer(
-        config, None, validator, None, None, None, None)
-
     msg = consumer._create_gevent_msg(pubsub_msg, raw_msg_data, 'a-schema')
 
     assert isinstance(msg, event_consumer.GEventMessage)
@@ -321,14 +319,10 @@ def test_create_gevent_msg(mocker, pubsub_msg, raw_msg_data, validator):
      None),
 ])
 def test_get_and_validate_pubsub_msg_schema(mocker, pubsub_msg, validator,
-                                            side_effect, expected):
+                                            side_effect, expected, consumer):
     """Validate & return schema of a pubsub message's data."""
-    config = {'subscription': 'foo'}
-    parser = parse.MessageParser()
-    consumer = event_consumer.GPSEventConsumer(
-        config, None, validator, parser, None, None, None)
-
     validator.validate.side_effect = side_effect
+
     data = json.loads(pubsub_msg.data)
     schema = consumer._get_and_validate_pubsub_msg_schema(data)
 
@@ -341,7 +335,7 @@ def test_get_and_validate_pubsub_msg_schema(mocker, pubsub_msg, validator,
 
 
 @pytest.mark.asyncio
-async def test_cleanup(mocker, consumer, caplog, pubsub_msg):
+async def test_handle_message(mocker, consumer, caplog, pubsub_msg):
     """Consumer acks Pub/Sub message."""
     mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
 
@@ -350,13 +344,13 @@ async def test_cleanup(mocker, consumer, caplog, pubsub_msg):
     mock_thread = mocker.Mock(event_consumer._GPSThread)
     consumer._threads[event_msg.msg_id] = (mock_event, mock_thread)
 
-    await consumer.cleanup(event_msg)
+    await consumer.handle_message(event_msg)
 
     pubsub_msg.ack.assert_called_once_with()
 
     exp_entry = {
         'timestamp': '2018-01-01T11:30:00.000000Z',
-        'plugin': 'consume',
+        'plugin': 'cleanup',
         'message': 'Acknowledged message in Pub/Sub.',
     }
     assert exp_entry in event_msg.history_log
