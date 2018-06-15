@@ -62,8 +62,7 @@ class GEventMessage:
         pubsub_msg (google.cloud.pubsub_v1.subscriber.message.Message):
             Google Pub/Sub message.
         data (dict): data to be enriched (if record info is missing) via
-            the IEnricher plugin, or to be published via the IPublisher
-            plugin.
+            the GCEEnricher, or to be published via the GDNSPublisher.
         phase (str): (optional) starting phase of the message. Defaults
             to ``None``.
     """
@@ -105,10 +104,12 @@ class GPSEventConsumerBuilder:
         kwargs (dict): Additional keyword arguments to pass to the
             event consumer.
     """
-    def __init__(self, config, success_channel, error_channel, **kwargs):
+    def __init__(self, config, success_channel, error_channel, metrics,
+                 **kwargs):
         self.config = config
         self.success_channel = success_channel
         self.error_channel = error_channel
+        self.metrics = metrics
         self.kwargs = kwargs
 
     def _validate_config(self):
@@ -202,11 +203,12 @@ class GPSEventConsumerBuilder:
         parser = parse.MessageParser()
         auth_client = self._init_auth()
         subscription = self._init_subscriber_client(auth_client)
-        loop = self.kwargs.get('loop', asyncio.get_event_loop())
+        if not self.kwargs.get('loop'):
+            self.kwargs['loop'] = asyncio.get_event_loop()
 
         return GPSEventConsumer(
-            self.config, subscription, validator, parser, self.success_channel,
-            self.error_channel, loop)
+            self.config, self.success_channel, self.error_channel,
+            self.metrics, subscription, validator, parser, **self.kwargs)
 
 
 class _GPSThread(threading.Thread):
@@ -256,7 +258,7 @@ class _GPSThread(threading.Thread):
         self.loop.call_soon_threadsafe(f)
 
 
-@zope.interface.implementer(interfaces.IEventConsumerClient)
+@zope.interface.implementer(interfaces.IRunnable, interfaces.IMessageHandler)
 class GPSEventConsumer:
     """Consume messages from Google Cloud Pub/Sub.
 
@@ -268,7 +270,8 @@ class GPSEventConsumer:
     :obj:`self.success_channel`. The `pubsub` module handles the message
     ack deadline extension behind the scenes. Once the `event_msg` is
     done processing, gordon's core routing system will submit it back to
-    this consumer to be `ack`'ed via the `cleanup` method.
+    this consumer to be `ack`'ed via the `handle_method` method used for
+    pubsub cleanup.
 
     Args:
         config (dict): configuration relevant to Cloud Pub/Sub.
@@ -278,13 +281,15 @@ class GPSEventConsumer:
             :interface:`interfaces.IEventMessages` that were not
             processed due to problems.
     """
-    phase = 'consume'
+    start_phase = 'consume'
+    phase = 'cleanup'
 
-    def __init__(self, config, subscriber, validator, parser, success_channel,
-                 error_channel, loop, **kwargs):
+    def __init__(self, config, success_channel, error_channel, metrics,
+                 subscriber, validator, parser,  loop, **kwargs):
         self.success_channel = success_channel
         # NOTE: error channel not yet used, but may be in future
         self.error_channel = error_channel
+        self.metrics = metrics
         self._subscriber = subscriber
         self._subscription = config['subscription']
         self._validator = validator
@@ -294,7 +299,7 @@ class GPSEventConsumer:
         self._logger = logging.getLogger('')
         self._threads = {}
 
-    async def cleanup(self, event_msg):
+    async def handle_message(self, event_msg):
         """Ack Pub/Sub message and update event message history.
 
         Args:
@@ -320,7 +325,7 @@ class GPSEventConsumer:
     def _create_gevent_msg(self, pubsub_msg, data, schema):
         log_entry = f'Created a "{schema}" message.'
         msg = GEventMessage(pubsub_msg, data)
-        msg.append_to_history(log_entry, self.phase)
+        msg.append_to_history(log_entry, self.start_phase)
         return msg
 
     def _get_and_validate_pubsub_msg_schema(self, pubsub_msg_data):
@@ -397,7 +402,7 @@ class GPSEventConsumer:
             logging.error(f'Issue polling subscription: {e}', exc_info=e)
             raise exceptions.GCPGordonError(e)
 
-    async def start(self):
+    async def run(self):
         """Start consuming messages from Google Pub/Sub.
 
         Once a Pub/Sub message is validated, a :class:`GEventMessage`

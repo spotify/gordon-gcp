@@ -68,7 +68,7 @@ def exp_sub(consumer_config):
 ])
 def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
                             exp_topic, auth_client, exp_sub, subscriber_client,
-                            emulator, monkeypatch, event_loop):
+                            emulator, monkeypatch, event_loop, metrics):
     """Happy path to initialize an Event Consumer client."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -80,6 +80,7 @@ def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
         'config': consumer_config,
         'success_channel': success_chnl,
         'error_channel': error_chnl,
+        'metrics': metrics
     }
     if provide_loop:
         kwargs['loop'] = event_loop
@@ -118,16 +119,14 @@ def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
 ])
 def test_get_event_consumer_config_raises(config_key, exp_msg, consumer_config,
                                           auth_client, subscriber_client,
-                                          caplog, emulator):
+                                          caplog, emulator, metrics):
     """Raise with improper configuration."""
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
-
     consumer_config.pop(config_key)
-
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
     with pytest.raises(exceptions.GCPConfigError) as e:
-        client = service.get_event_consumer(consumer_config, success_chnl,
-                                            error_chnl)
-        client._subscriber.create_subscription.assert_not_called()
+        service.get_event_consumer(
+            consumer_config, success_chnl, error_chnl, metrics)
+    subscriber_client.create_subscription.assert_not_called()
 
     e.match('Invalid configuration:\n' + exp_msg)
     assert 1 == len(caplog.records)
@@ -135,7 +134,7 @@ def test_get_event_consumer_config_raises(config_key, exp_msg, consumer_config,
 
 def test_get_event_consumer_raises_topic(consumer_config, auth_client,
                                          subscriber_client, caplog, emulator,
-                                         exp_topic, exp_sub):
+                                         exp_topic, exp_sub, metrics):
     """Raise when there is no topic to subscribe to."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -144,8 +143,9 @@ def test_get_event_consumer_raises_topic(consumer_config, auth_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        service.get_event_consumer(consumer_config, success_chnl, error_chnl)
-        sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
+        service.get_event_consumer(
+            consumer_config, success_chnl, error_chnl, metrics)
+    sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Topic "{exp_topic}" does not exist.')
     assert 3 == len(caplog.records)
@@ -153,7 +153,7 @@ def test_get_event_consumer_raises_topic(consumer_config, auth_client,
 
 def test_get_event_consumer_raises(consumer_config, auth_client,
                                    subscriber_client, caplog, emulator,
-                                   exp_topic, exp_sub):
+                                   exp_topic, exp_sub, metrics):
     """Raise when any other error occured with creating a subscription."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -162,8 +162,9 @@ def test_get_event_consumer_raises(consumer_config, auth_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     with pytest.raises(exceptions.GCPGordonError) as e:
-        service.get_event_consumer(consumer_config, success_chnl, error_chnl)
-        sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
+        service.get_event_consumer(
+            consumer_config, success_chnl, error_chnl, metrics)
+    sub_inst.create_subscription.assert_called_once_with(exp_sub, exp_topic)
 
     e.match(f'Error trying to create subscription "{exp_sub}"')
     assert 3 == len(caplog.records)
@@ -171,7 +172,7 @@ def test_get_event_consumer_raises(consumer_config, auth_client,
 
 def test_get_event_consumer_sub_exists(consumer_config, auth_client,
                                        subscriber_client, emulator, exp_topic,
-                                       exp_sub):
+                                       exp_sub, metrics):
     """Do not raise if topic already exists."""
     success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
@@ -180,7 +181,7 @@ def test_get_event_consumer_sub_exists(consumer_config, auth_client,
     sub_inst.create_subscription.side_effect = [exp]
 
     client = service.get_event_consumer(consumer_config, success_chnl,
-                                        error_chnl)
+                                        error_chnl, metrics)
 
     assert client._subscriber
 
@@ -199,14 +200,12 @@ def enricher_config(fake_keyfile):
     (None, 5),
     (10, 10)])
 def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
-                      retries):
+                      retries, metrics):
     """Happy path to initialize an Enricher client."""
     mocker.patch('gordon_gcp.plugins.service.enricher.http.AIOConnection')
     enricher_config['retries'] = conf_retries
 
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
-
-    client = service.get_enricher(enricher_config, success_chnl, error_chnl)
+    client = service.get_enricher(enricher_config, metrics)
 
     assert isinstance(client, service.enricher.GCEEnricher)
     assert client.config
@@ -219,28 +218,27 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
                 'authenticate to the GCE API.'),
     ('dns_zone', 'A dns zone is required to build correct A records.')])
 def test_get_enricher_missing_config_raises(mocker, caplog, enricher_config,
-                                            auth_client, config_key, exc_msg):
+                                            auth_client, config_key, exc_msg,
+                                            metrics):
     """Raise when configuration key is missing."""
     mocker.patch('gordon_gcp.plugins.service.enricher.http.AIOConnection')
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
     enricher_config.pop(config_key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        service.get_enricher(enricher_config, success_chnl, error_chnl)
+        service.get_enricher(enricher_config, metrics)
 
     e.match('Invalid configuration:\n' + exc_msg)
     assert 1 == len(caplog.records)
 
 
 def test_get_enricher_config_bad_dns_zone(mocker, caplog, enricher_config,
-                                          auth_client):
+                                          auth_client, metrics):
     """Raise when 'dns_zone' config value doesn't end with root zone."""
     mocker.patch('gordon_gcp.plugins.service.enricher.http.AIOConnection')
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
     enricher_config['dns_zone'] = 'example.com'
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        service.get_enricher(enricher_config, success_chnl, error_chnl)
+        service.get_enricher(enricher_config, metrics)
 
     exc_msg = 'A dns zone must be an FQDN and end with the root zone \("."\).'
     e.match('Invalid configuration:\n' + exc_msg)
@@ -272,7 +270,7 @@ def publisher_config(fake_keyfile):
     ('api_version', False, 'v1'),
 ))
 def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
-                            publisher_config, auth_client):
+                            publisher_config, auth_client, metrics):
     """Happy path to initialize a GDNSPublisher client."""
     patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
     mocker.patch(patch)
@@ -280,10 +278,7 @@ def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
     if conf_value:
         publisher_config[conf_key] = conf_value
 
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
-
-    client = service.get_gdns_publisher(
-        publisher_config, success_chnl, error_chnl)
+    client = service.get_gdns_publisher(publisher_config, metrics)
 
     assert isinstance(client, service.gdns_publisher.GDNSPublisher)
     assert publisher_config == client.config
@@ -306,17 +301,16 @@ def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
 ))
 def test_get_gdns_publisher_raises(conf_keys, exp_msg_snip,
                                    publisher_config, mocker, auth_client,
-                                   caplog):
+                                   caplog, metrics):
     """Raise when required config key(s) missing."""
     patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
     mocker.patch(patch)
 
     for conf_key in conf_keys:
         publisher_config.pop(conf_key)
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        service.get_gdns_publisher(publisher_config, success_chnl, error_chnl)
+        service.get_gdns_publisher(publisher_config, metrics)
 
     e.match('Invalid configuration:\n' + exp_msg_snip)
     assert len(conf_keys) == len(caplog.records)
@@ -334,16 +328,15 @@ def test_get_gdns_publisher_raises(conf_keys, exp_msg_snip,
 ))
 def test_get_gdns_publisher_bad_config(conf_key, bad_value, exp_msg_snip,
                                        publisher_config, mocker, auth_client,
-                                       caplog):
+                                       caplog, metrics):
     """Raise when config values are malformed."""
     patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
     mocker.patch(patch)
 
     publisher_config[conf_key] = bad_value
-    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        service.get_gdns_publisher(publisher_config, success_chnl, error_chnl)
+        service.get_gdns_publisher(publisher_config, metrics)
 
     e.match('Invalid configuration:\n' + exp_msg_snip)
     assert 1 == len(caplog.records)

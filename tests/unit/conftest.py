@@ -188,7 +188,7 @@ def get_gce_client(mocker, auth_client):
 
 
 @pytest.fixture
-def gpubsub_publisher_client(mocker, monkeypatch):
+def mock_pubsub_client(mocker, monkeypatch):
     mock = mocker.Mock(pubsub.PublisherClient, autospec=True)
     patch = (
         'gordon_gcp.plugins.janitor.gpubsub_publisher.pubsub.PublisherClient')
@@ -247,3 +247,8 @@ def instance_data():
 @pytest.fixture
 def emulator(monkeypatch):
     monkeypatch.delenv('PUBSUB_EMULATOR_HOST', raising=False)
+
+
+@pytest.fixture
+def metrics(mocker):
+    return mocker.Mock()
