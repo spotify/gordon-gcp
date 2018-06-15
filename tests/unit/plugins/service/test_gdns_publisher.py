@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import json
 
 import pytest
@@ -22,8 +21,8 @@ from google.cloud import pubsub_v1
 from gordon import interfaces
 
 from gordon_gcp import exceptions
-from gordon_gcp.clients import http
-from gordon_gcp.plugins.service import event_consumer, gdns_publisher
+from gordon_gcp.plugins.service import event_consumer
+from gordon_gcp.plugins.service import gdns_publisher
 
 
 #####
@@ -267,9 +266,8 @@ def mock_http_client(mocker, create_mock_coro):
 
 
 @pytest.fixture
-def gdns_publisher_instance(mock_http_client, config):
-    success, error = asyncio.Queue(), asyncio.Queue()
-    pb = gdns_publisher.GDNSPublisher(config, success, error, mock_http_client)
+def gdns_publisher_instance(mocker, mock_http_client, config, metrics):
+    pb = gdns_publisher.GDNSPublisher(config, metrics, mock_http_client)
     return pb
 
 
@@ -293,38 +291,33 @@ def mock_sleep(mocker):
 @pytest.mark.filterwarnings(
     "ignore:coroutine 'test_gpsthread_add_task.<locals>.noop' was never "
     "awaited")
-def test_implements_interface(config, auth_client):
-    """GDNSPublisher implements IPublisherClient"""
-    client = http.AIOConnection(auth_client=auth_client)
+def test_implements_interface(mocker, config, metrics):
+    """GDNSPublisher implements IMessageHandler"""
+    http_client = mocker.Mock()
+    plugin = gdns_publisher.GDNSPublisher(config, metrics, http_client)
 
-    success, error = asyncio.Queue(), asyncio.Queue()
-    plugin = gdns_publisher.GDNSPublisher(config, success, error, client)
-
-    assert interfaces.IPublisherClient.providedBy(plugin)
-    assert interfaces.IPublisherClient.implementedBy(
+    assert interfaces.IMessageHandler.providedBy(plugin)
+    assert interfaces.IMessageHandler.implementedBy(
         gdns_publisher.GDNSPublisher)
-    assert config is plugin.config
-    assert success is plugin.success_channel
-    assert error is plugin.error_channel
     assert 'publish' == plugin.phase
 
 
 @pytest.mark.asyncio
-async def test_publish_changes_raises_exception_on_invalid_zone(
+async def test_handle_message_raises_exception_on_invalid_zone(
         gdns_publisher_instance, event_message,
         event_msg_data_with_invalid_zone, caplog):
     """Ensure exception raised on invalid zone"""
     event_message.data = event_msg_data_with_invalid_zone
 
     with pytest.raises(exceptions.InvalidDNSZoneInMessageError) as error:
-        await gdns_publisher_instance.publish_changes(
+        await gdns_publisher_instance.handle_message(
             event_message)
     assert error.match('Error when asserting zone for record:')
     assert 2 == len(caplog.records)
 
 
 @pytest.mark.asyncio
-async def test_publish_changes_handles_update_conflict(
+async def test_handle_message_handles_update_conflict(
         gdns_publisher_instance, event_message,
         all_existing_zone_records, rrsets_url, changes_url,
         initial_changes_req, handled_conflict_changes_req,
@@ -339,7 +332,7 @@ async def test_publish_changes_handles_update_conflict(
     gdns_publisher_instance.http_client._get_json_mock.return_value = (
         initial_changes_resp)
 
-    await gdns_publisher_instance.publish_changes(event_message)
+    await gdns_publisher_instance.handle_message(event_message)
 
     gdns_publisher_instance.http_client._get_all_mock.assert_called_with(
         rrsets_url)
@@ -351,7 +344,7 @@ async def test_publish_changes_handles_update_conflict(
 
 
 @pytest.mark.asyncio
-async def test_publish_changes_raises_exception_on_publish_timeout(
+async def test_handle_message_raises_exception_on_publish_timeout(
         gdns_publisher_instance, event_message, changes_url,
         initial_changes_req, initial_changes_resp,
         initial_changes_pending_json_resp, mock_sleep, caplog):
@@ -365,7 +358,7 @@ async def test_publish_changes_raises_exception_on_publish_timeout(
         initial_changes_resp
 
     with pytest.raises(exceptions.GCPPublishRecordTimeoutError) as error:
-        await gdns_publisher_instance.publish_changes(event_message)
+        await gdns_publisher_instance.handle_message(event_message)
 
     assert error.match('Timed out while waiting for DNS changes to transition '
                        'to \'done\' status.')
@@ -386,7 +379,7 @@ http_exceptions = [
 
 @pytest.mark.parametrize('status_code,http_exception', http_exceptions)
 @pytest.mark.asyncio
-async def test__publish_changes_http_exceptions_raised(
+async def test__handle_message_http_exceptions_raised(
         gdns_publisher_instance, initial_changes_req, changes_url, status_code,
         http_exception):
     """Exception is raised when getting HTTP error from Google API."""
@@ -400,7 +393,7 @@ async def test__publish_changes_http_exceptions_raised(
 
 
 @pytest.mark.asyncio
-async def test__publish_changes_returns_change_id(
+async def test__handle_message_returns_change_id(
         gdns_publisher_instance, initial_changes_req,
         changes_url, initial_changes_pending_json_resp):
     """Ensure change ID is returned from Google API."""

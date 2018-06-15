@@ -50,19 +50,13 @@ class GDNSPublisherBuilder:
 
     Args:
         config (dict): Google Cloud DNS API related configuration.
-        success_channel (asyncio.Queue): Queue to place a successfully
-            published message to be further handled by the ``gordon``
-            core system.
-        error_channel (asyncio.Queue): Queue to place a message met
-            with errors to be further handled by the ``gordon`` core
-            system.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         kwargs (dict): Additional keyword arguments to pass to the
             publisher.
     """
-    def __init__(self, config, success_channel, error_channel, **kwargs):
+    def __init__(self, config, metrics, **kwargs):
         self.config = config
-        self.success_channel = success_channel
-        self.error_channel = error_channel
+        self.metrics = metrics
         self.kwargs = kwargs
         self.validate_config_funcs = [
             self._validate_keyfile, self._validate_project,
@@ -148,10 +142,10 @@ class GDNSPublisherBuilder:
         self._validate_config()
         http_client = self._init_http_client()
         return GDNSPublisher(
-            self.config, self.success_channel, self.error_channel, http_client)
+            self.config, self.metrics, http_client, **self.kwargs)
 
 
-@zope.interface.implementer(interfaces.IPublisherClient)
+@zope.interface.implementer(interfaces.IMessageHandler)
 class GDNSPublisher:
     """Publish records to Google Cloud DNS.
 
@@ -174,23 +168,15 @@ class GDNSPublisher:
     # see https://cloud.google.com/dns/api/v1/changes#resource
     DNS_CHANGES_DONE = 'done'
 
-    def __init__(self, config, success_channel, error_channel, http_client):
+    def __init__(self, config, metrics, http_client, **kwargs):
         self.config = config
-        self.success_channel = success_channel
-        self.error_channel = error_channel
         self.http_client = http_client
+        self.metrics = metrics
         self.publish_wait_timeout = self.config.get('publish_wait_timeout', 60)
         self.project = self.config['project']
         self.default_ttl = self.config['default_ttl']
         self.api_version = self.config.get('api_version', 'v1')
         self._logger = logging.getLogger('')
-
-    # TODO: This will be eventually moved to GEventMessage
-    async def update_phase(self, event_msg, phase=None):
-        old_phase = event_msg.phase
-        event_msg.phase = phase or self.phase
-        msg = f'Updated phase from "{old_phase}" to "{event_msg.phase}".'
-        event_msg.append_to_history(msg, self.phase)
 
     def _format_resource_record_changes(self, action, resource_record):
         """Return dict containing the changes to be made.
@@ -340,7 +326,7 @@ class GDNSPublisher:
             raise exceptions.GCPPublishRecordTimeoutError(msg)
         logger.info('Records successfully published.')
 
-    async def publish_changes(self, event_msg):
+    async def handle_message(self, event_msg):
         """Publish changes extracted from the event message.
 
         Args:
