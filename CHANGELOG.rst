@@ -1,10 +1,22 @@
 Changelog
 =========
 
+0.0.1.dev7 (2018-06-15)
+-----------------------
+Changed
+~~~~~~~
+* Update gordon-dns to 0.0.1.dev3.
+
+
+Removed
+~~~~~~~
+* Remove routing logic from plugins.
+
+
 0.0.1.dev6 (2018-06-07)
 -----------------------
 
-Changes
+Changed
 ~~~~~~~
 
 * Internal API improvements.
@@ -13,7 +25,7 @@ Changes
 0.0.1.dev5 (2018-06-07)
 -----------------------
 
-Changes
+Changed
 ~~~~~~~
 
 * Fix failure for core to instantiate GDNSPublisher plugin.
@@ -23,14 +35,14 @@ Changes
 0.0.1.dev4 (2018-06-05)
 -----------------------
 
-Additions
-~~~~~~~~~
+Added
+~~~~~
 
 * Merged gordon-janitor-gcp repo into gordon-gcp.
 * Added janitor plugin summaries.
 * Added missing exception docs.
 
-Changes
+Changed
 ~~~~~~~
 
 * Updated and fixed OWNERS.
@@ -41,8 +53,8 @@ Changes
 
 -----------------------
 
-Additions
-~~~~~~~~~
+Added
+~~~~~
 
 * Add implementation of IEventConsumer.
 * Add implementation of IPublisher.
@@ -54,7 +66,7 @@ Additions
 0.0.1.dev2 (2018-03-29)
 -----------------------
 
-Changes
+Changed
 ~~~~~~~
 
 Fixed packaging.
@@ -63,7 +75,7 @@ Fixed packaging.
 0.0.1.dev1 (2018-03-28)
 -----------------------
 
-Changes
+Changed
 ~~~~~~~
 
 Initial development release.
