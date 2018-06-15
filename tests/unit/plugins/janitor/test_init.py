@@ -28,7 +28,7 @@ from gordon_gcp.plugins import janitor
     (False, 30, 30, 'projects/test-example/topics/a-topic'),
 ])
 def test_get_gpubsub_publisher(local, timeout, exp_timeout, topic, config,
-                               auth_client, gpubsub_publisher_client, emulator,
+                               auth_client, emulator, mock_pubsub_client,
                                monkeypatch):
     """Happy path to initialize a GPubsubPublisher client."""
     changes_chnl = asyncio.Queue()
@@ -51,14 +51,14 @@ def test_get_gpubsub_publisher(local, timeout, exp_timeout, topic, config,
     client.publisher.create_topic.assert_called_once_with(exp_topic)
 
 
-@pytest.mark.parametrize('config_key,exp_msg',  [
+@pytest.mark.parametrize('config_key,exp_msg', [
     ('keyfile', 'The path to a Service Account JSON keyfile is required '),
     ('project', 'The GCP project where Cloud Pub/Sub is located is required.'),
     ('topic', ('A topic for the client to publish to in Cloud Pub/Sub is '
                'required.')),
 ])
 def test_get_gpubsub_publisher_config_raises(
-        config_key, exp_msg, config, auth_client, gpubsub_publisher_client,
+        config_key, exp_msg, config, auth_client, mock_pubsub_client,
         caplog, emulator):
     """Raise with improper configuration."""
     changes_chnl = asyncio.Queue()
@@ -73,10 +73,10 @@ def test_get_gpubsub_publisher_config_raises(
 
 
 def test_get_gpubsub_publisher_raises(
-        config, auth_client, gpubsub_publisher_client, caplog, emulator):
+        config, auth_client, mock_pubsub_client, caplog, emulator):
     """Raise when there's an issue creating a Google Pub/Sub topic."""
     changes_chnl = asyncio.Queue()
-    gpubsub_publisher_client.return_value.create_topic.side_effect = [
+    mock_pubsub_client.return_value.create_topic.side_effect = [
         Exception('fooo')
     ]
 
@@ -90,11 +90,11 @@ def test_get_gpubsub_publisher_raises(
 
 
 def test_get_gpubsub_publisher_topic_exists(
-        config, auth_client, gpubsub_publisher_client, emulator):
+        config, auth_client, mock_pubsub_client, emulator):
     """Do not raise if topic already exists."""
     changes_chnl = asyncio.Queue()
     exp = google_exceptions.AlreadyExists('foo')
-    gpubsub_publisher_client.return_value.create_topic.side_effect = [exp]
+    mock_pubsub_client.return_value.create_topic.side_effect = [exp]
 
     short_topic = config['topic']
     client = janitor.get_gpubsub_publisher(config, changes_chnl)

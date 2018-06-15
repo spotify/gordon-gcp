@@ -156,7 +156,8 @@ class GPubsubPublisher:
     """Client to publish change messages to Google Pub/Sub.
 
     Args:
-        config (dict): Google Cloud Pub/Sub-related configuration.
+        config (dict): Google Cloud Pub/Sub-related configuration, ex.
+            'projects/test-example/topics/a-topic'.
         publisher (google.cloud.pubsub_v1.publisher.client.Client):
             client to interface with Google Pub/Sub API.
         changes_channel (asyncio.Queue): queue to publish message to
@@ -168,6 +169,7 @@ class GPubsubPublisher:
         self.publisher = publisher
         self.changes_channel = changes_channel
         self.cleanup_timeout = config.get('cleanup_timeout', 60)
+        self.sleep_for = 0.5  # half a second
         self._messages = set()
 
     async def cleanup(self):
@@ -180,15 +182,14 @@ class GPubsubPublisher:
         tasks_to_clear = [
             t for t in self._messages if not t.done()
         ]
-        sleep_for = 0.5  # half a second
-        iterations = self.cleanup_timeout / sleep_for
 
+        iterations = self.cleanup_timeout / self.sleep_for
         while iterations:
             tasks_to_clear = [t for t in tasks_to_clear if not t.done()]
             if not tasks_to_clear:
                 break
 
-            await asyncio.sleep(sleep_for)
+            await asyncio.sleep(self.sleep_for)
             iterations -= 1
 
         # give up on waiting for tasks to complete

@@ -284,6 +284,13 @@ def mock_sleep(mocker):
 #####
 # GDNS Publisher Tests
 #####
+# For some reason, the event loop for this test leaks over to
+# tests.unit.plugins.service.test_event_consumer:test_gpsthread_add_task so
+# there's a warning of not awaiting the coroutine (which is expected).
+# Threads + asyncio + testing is hard.
+@pytest.mark.filterwarnings(
+    "ignore:coroutine 'test_gpsthread_add_task.<locals>.noop' was never "
+    "awaited")
 def test_implements_interface(mocker, config, metrics):
     """GDNSPublisher implements IMessageHandler"""
     http_client = mocker.Mock()
@@ -295,13 +302,6 @@ def test_implements_interface(mocker, config, metrics):
     assert 'publish' == plugin.phase
 
 
-# For some reason, the event loop for this test leaks over to
-# tests.unit.plugins.service.test_event_consumer:test_gpsthread_add_task so
-# there's a warning of not awaiting the coroutine (which is expected).
-# Threads + asyncio + testing is hard.
-@pytest.mark.filterwarnings(
-    "ignore:coroutine 'test_gpsthread_add_task.<locals>.noop' was never "
-    "awaited")
 @pytest.mark.asyncio
 async def test_handle_message_raises_exception_on_invalid_zone(
         gdns_publisher_instance, event_message,
