@@ -48,12 +48,7 @@ class GCEEnricherBuilder:
 
     Args:
         config (dict): Google Compute Engine API related configuration.
-        success_channel (asyncio.Queue): queue to place a successfully
-            enriched message to be further handled by the ``gordon``
-            core system.
-        error_channel (asyncio.Queue): queue to place a message met
-            with errors to be further handled by the ``gordon`` core
-            system.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         kwargs (dict): Additional keyword arguments to pass to the
             enricher.
     """
@@ -117,7 +112,7 @@ class GCEEnricherBuilder:
 
     def build_enricher(self):
         return GCEEnricher(
-            self.config, self.http_client, self.metrics, **self.kwargs)
+            self.config, self.metrics, self.http_client, **self.kwargs)
 
 
 @zope.interface.implementer(interfaces.IMessageHandler)
@@ -126,20 +121,16 @@ class GCEEnricher:
 
     Args:
         config (dict): configuration relevant to Compute Engine.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         http_client (.AIOConnection): client for interacting with
             the GCE API.
-        success_channel (asyncio.Queue): a sink for successfully
-            processed :interface:`interfaces.IEventMessages`.
-        error_channel (asyncio.Queue): a sink for
-            :interface:`interfaces.IEventMessages` that were not
-            processed due to problems.
     """
     phase = 'enrich'
 
-    def __init__(self, config, http_client, metrics, **kwargs):
+    def __init__(self, config, metrics, http_client, **kwargs):
         self.config = config
-        self._http_client = http_client
         self.metrics = metrics
+        self._http_client = http_client
         self._logger = logging.getLogger('')
 
     def _check_instance_data(self, instance_data):
