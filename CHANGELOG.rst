@@ -1,8 +1,17 @@
 Changelog
 =========
 
+0.0.1.dev8 (2018-06-18)
+-----------------------
+
+Changed
+~~~~~~~
+* Reorder args for GCEEnricher.
+
+
 0.0.1.dev7 (2018-06-15)
 -----------------------
+
 Changed
 ~~~~~~~
 * Update gordon-dns to 0.0.1.dev3.
