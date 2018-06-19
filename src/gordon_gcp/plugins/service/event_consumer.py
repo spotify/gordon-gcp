@@ -330,7 +330,7 @@ class GPSEventConsumer:
 
     def _create_gevent_msg(self, pubsub_msg, data, schema):
         log_entry = f'Created a "{schema}" message.'
-        msg = GEventMessage(pubsub_msg, data)
+        msg = GEventMessage(pubsub_msg, data, phase=self.start_phase)
         msg.append_to_history(log_entry, self.start_phase)
         return msg
 

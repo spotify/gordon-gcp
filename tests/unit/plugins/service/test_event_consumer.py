@@ -264,7 +264,8 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
                                  audit_log_data, caplog, pubsub_msg,
                                  mock_get_and_validate, mock_create_gevent_msg):
     """Validate pubsub msg, create GEventMessage, and add to success chnl."""
-    event_msg = event_consumer.GEventMessage(pubsub_msg, audit_log_data, [])
+    event_msg = event_consumer.GEventMessage(
+        pubsub_msg, audit_log_data, phase='consume')
     mock_create_gevent_msg.return_value = event_msg
 
     await consumer._handle_pubsub_msg(pubsub_msg)
@@ -276,6 +277,7 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
     assert 1 == consumer.success_channel.qsize()
     assert event_msg is await consumer.success_channel.get()
     assert 4 == len(caplog.records)
+    assert 'consume' == event_msg.phase
 
 
 @pytest.mark.asyncio
