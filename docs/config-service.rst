@@ -62,6 +62,11 @@ All configuration options above in the general ``[gcp]`` may be used here. Addit
 
     For more information on Google Pub/Sub subscriptions, please see `Google's docs on managing subscriptions <subscriptions>`_.
 
+.. option:: max_messages=INT
+
+    `Optional`: Number of Pub/Sub messages to process at a time. Defaults to 25.
+
+
 ``[gcp.enricher]``
 ~~~~~~~~~~~~~~~~~~
 

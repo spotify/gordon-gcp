@@ -42,6 +42,7 @@ import threading
 import zope.interface
 from google.api_core import exceptions as google_exceptions
 from google.cloud import pubsub
+from google.cloud.pubsub_v1 import types
 from gordon import interfaces
 
 from gordon_gcp import exceptions
@@ -199,9 +200,13 @@ class GPSEventConsumerBuilder:
             logging.error(msg, exc_info=e)
             raise exceptions.GCPGordonError(msg)
 
+        max_messages = self.config.get('max_messages', 25)
+        flow_control = types.FlowControl(max_messages=max_messages)
+
         logging.info(f'Starting a "{self.config["subscription"]}" subscriber '
                      f'to "{self.config["topic"]}" topic.')
-        return client.subscribe(self.config['subscription'])
+        return client.subscribe(
+            self.config['subscription'], flow_control=flow_control)
 
     def build_event_consumer(self):
         self._validate_config()
@@ -391,10 +396,6 @@ class GPSEventConsumer:
         self._threads[pubsub_msg.message_id] = (event, thread)
 
     def _manage_subs(self):
-        # TODO (lynn): look into needing flow control, e.g.:
-        # flow_control = pubsub_v1.types.FlowControl(max_messages=10)
-        # self._subscriber.subscribe(self._subscription,
-        #     flow_control=flow_control)
         # NOTE: automatically extends deadline in the background;
         #       must `nack()` if can't finish. We don't proactively
         #       `nack` in this plugin since it'll just get redelivered.
