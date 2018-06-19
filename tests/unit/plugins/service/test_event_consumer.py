@@ -268,16 +268,21 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
         pubsub_msg, audit_log_data, phase='consume')
     mock_create_gevent_msg.return_value = event_msg
 
+    mock_run_coro_threadsafe = mocker.Mock()
+    patch = ('gordon_gcp.plugins.service.event_consumer.asyncio.'
+             'run_coroutine_threadsafe')
+    monkeypatch.setattr(patch, mock_run_coro_threadsafe)
+
     await consumer._handle_pubsub_msg(pubsub_msg)
 
     audit_log_data.update({'resourceRecords': []})
     mock_get_and_validate.assert_called_once_with(raw_msg_data)
     mock_create_gevent_msg.assert_called_once_with(
         pubsub_msg, audit_log_data, 'audit-log')
-    assert 1 == consumer.success_channel.qsize()
-    assert event_msg is await consumer.success_channel.get()
+
     assert 4 == len(caplog.records)
     assert 'consume' == event_msg.phase
+    mock_run_coro_threadsafe.assert_called_once()
 
 
 @pytest.mark.asyncio

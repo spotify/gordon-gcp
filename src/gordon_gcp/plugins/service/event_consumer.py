@@ -371,7 +371,9 @@ class GPSEventConsumer:
             pubsub_msg, event_msg_data, schema)
 
         msg_logger.debug(f'Adding message to the success channel.')
-        await self.success_channel.put(event_msg)
+
+        coro = self.success_channel.put(event_msg)
+        asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def _thread_pubsub_msg(self, pubsub_msg):
         # Create a new thread with its own event loop to process the
