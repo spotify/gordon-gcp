@@ -104,6 +104,22 @@ def test_event_msg_append_to_history(mocker, pubsub_msg, raw_msg_data):
     assert expected == msg.history_log
 
 
+def test_event_msg_update_phase(mocker, pubsub_msg, raw_msg_data):
+    """Update phase of the message and write to history log."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
+    msg = event_consumer.GEventMessage(pubsub_msg, raw_msg_data)
+
+    msg.update_phase('emo')
+
+    assert 'emo' == msg.phase
+    expected = [{
+        'timestamp': '2018-01-01T11:30:00.000000Z',
+        'plugin': None,
+        'message': 'Updated phase from None to emo'
+    }]
+    assert expected == msg.history_log
+
+
 #####
 # GPSEventConsumer tests
 #####

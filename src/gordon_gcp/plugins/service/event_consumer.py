@@ -89,6 +89,12 @@ class GEventMessage:
         }
         self.history_log.append(log_item)
 
+    def update_phase(self, new_phase):
+        self.phase, old_phase = new_phase, self.phase
+        msg = f'Updated phase from {old_phase} to {new_phase}'
+        self.append_to_history(msg, plugin=None)
+        logging.info(msg)
+
 
 class GPSEventConsumerBuilder:
     """Build and configure a :class:`GPSEventConsumer` object.
