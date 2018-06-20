@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev10 (2018-06-20)
+------------------------
+
+Changed
+~~~~~~~
+* Updated the Google API compute v1 endpoint URL.
+
+
 0.0.1.dev9 (2018-06-20)
 -----------------------
 
