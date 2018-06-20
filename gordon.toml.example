@@ -16,6 +16,7 @@ dns_zone = "example.com."
 keyfile = "/path/to/keyfiles/pubsub.json"
 topic = "my-dns-changes"
 subscription = "gordon-consumer"
+max_messages = 25
 
 [gcp.publisher]
 project = "my-dns-project"

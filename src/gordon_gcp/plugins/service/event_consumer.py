@@ -42,6 +42,7 @@ import threading
 import zope.interface
 from google.api_core import exceptions as google_exceptions
 from google.cloud import pubsub
+from google.cloud.pubsub_v1 import types
 from gordon import interfaces
 
 from gordon_gcp import exceptions
@@ -88,6 +89,12 @@ class GEventMessage:
             'message': message
         }
         self.history_log.append(log_item)
+
+    def update_phase(self, new_phase):
+        self.phase, old_phase = new_phase, self.phase
+        msg = f'Updated phase from {old_phase} to {new_phase}'
+        self.append_to_history(msg, plugin=None)
+        logging.info(msg)
 
 
 class GPSEventConsumerBuilder:
@@ -193,9 +200,13 @@ class GPSEventConsumerBuilder:
             logging.error(msg, exc_info=e)
             raise exceptions.GCPGordonError(msg)
 
+        max_messages = self.config.get('max_messages', 25)
+        flow_control = types.FlowControl(max_messages=max_messages)
+
         logging.info(f'Starting a "{self.config["subscription"]}" subscriber '
                      f'to "{self.config["topic"]}" topic.')
-        return client.subscribe(self.config['subscription'])
+        return client.subscribe(
+            self.config['subscription'], flow_control=flow_control)
 
     def build_event_consumer(self):
         self._validate_config()
@@ -324,7 +335,7 @@ class GPSEventConsumer:
 
     def _create_gevent_msg(self, pubsub_msg, data, schema):
         log_entry = f'Created a "{schema}" message.'
-        msg = GEventMessage(pubsub_msg, data)
+        msg = GEventMessage(pubsub_msg, data, phase=self.start_phase)
         msg.append_to_history(log_entry, self.start_phase)
         return msg
 
@@ -365,7 +376,9 @@ class GPSEventConsumer:
             pubsub_msg, event_msg_data, schema)
 
         msg_logger.debug(f'Adding message to the success channel.')
-        await self.success_channel.put(event_msg)
+
+        coro = self.success_channel.put(event_msg)
+        asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def _thread_pubsub_msg(self, pubsub_msg):
         # Create a new thread with its own event loop to process the
@@ -383,10 +396,6 @@ class GPSEventConsumer:
         self._threads[pubsub_msg.message_id] = (event, thread)
 
     def _manage_subs(self):
-        # TODO (lynn): look into needing flow control, e.g.:
-        # flow_control = pubsub_v1.types.FlowControl(max_messages=10)
-        # self._subscriber.subscribe(self._subscription,
-        #     flow_control=flow_control)
         # NOTE: automatically extends deadline in the background;
         #       must `nack()` if can't finish. We don't proactively
         #       `nack` in this plugin since it'll just get redelivered.

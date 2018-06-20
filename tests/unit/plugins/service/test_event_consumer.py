@@ -104,6 +104,22 @@ def test_event_msg_append_to_history(mocker, pubsub_msg, raw_msg_data):
     assert expected == msg.history_log
 
 
+def test_event_msg_update_phase(mocker, pubsub_msg, raw_msg_data):
+    """Update phase of the message and write to history log."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
+    msg = event_consumer.GEventMessage(pubsub_msg, raw_msg_data)
+
+    msg.update_phase('emo')
+
+    assert 'emo' == msg.phase
+    expected = [{
+        'timestamp': '2018-01-01T11:30:00.000000Z',
+        'plugin': None,
+        'message': 'Updated phase from None to emo'
+    }]
+    assert expected == msg.history_log
+
+
 #####
 # GPSEventConsumer tests
 #####
@@ -248,8 +264,14 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
                                  audit_log_data, caplog, pubsub_msg,
                                  mock_get_and_validate, mock_create_gevent_msg):
     """Validate pubsub msg, create GEventMessage, and add to success chnl."""
-    event_msg = event_consumer.GEventMessage(pubsub_msg, audit_log_data, [])
+    event_msg = event_consumer.GEventMessage(
+        pubsub_msg, audit_log_data, phase='consume')
     mock_create_gevent_msg.return_value = event_msg
+
+    mock_run_coro_threadsafe = mocker.Mock()
+    patch = ('gordon_gcp.plugins.service.event_consumer.asyncio.'
+             'run_coroutine_threadsafe')
+    monkeypatch.setattr(patch, mock_run_coro_threadsafe)
 
     await consumer._handle_pubsub_msg(pubsub_msg)
 
@@ -257,9 +279,10 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
     mock_get_and_validate.assert_called_once_with(raw_msg_data)
     mock_create_gevent_msg.assert_called_once_with(
         pubsub_msg, audit_log_data, 'audit-log')
-    assert 1 == consumer.success_channel.qsize()
-    assert event_msg is await consumer.success_channel.get()
+
     assert 4 == len(caplog.records)
+    assert 'consume' == event_msg.phase
+    mock_run_coro_threadsafe.assert_called_once()
 
 
 @pytest.mark.asyncio
