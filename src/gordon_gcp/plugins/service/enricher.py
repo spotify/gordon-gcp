@@ -139,7 +139,7 @@ class GCEEnricher:
     async def _poll_for_instance_data(self, resource_name, msg_logger):
         exception = None
         backoff = 2
-        base_url = f'https://compute.googleapis.com/compute/v1/{resource_name}'
+        base_url = f'https://www.googleapis.com/compute/v1/{resource_name}'
 
         # Poll until instance data contains all necessary information.
         for attempt in range(1, self.config['retries'] + 1):
