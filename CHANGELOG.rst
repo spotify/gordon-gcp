@@ -1,6 +1,24 @@
 Changelog
 =========
 
+0.0.1.dev9 (2018-06-20)
+-----------------------
+
+Added
+~~~~~
+* Add threadsafety when adding a message to the success channel from ``GPSEventConsumer``.
+* Add flow control when consuming from Pub/Sub.
+
+Changed
+~~~~~~~
+* Update interface implementation of ``GEventMessage``.
+
+
+Removed
+~~~~~~~
+* Remove date validation in schemas.
+
+
 0.0.1.dev8 (2018-06-18)
 -----------------------
 
