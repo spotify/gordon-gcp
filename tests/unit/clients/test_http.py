@@ -339,12 +339,18 @@ async def test_post_json_raises(client, monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('max_pages', [1, 2])
-async def test_get_all(mocker, max_pages):
+@pytest.mark.parametrize('max_pages,test_param', [
+        [1, None],
+        [2, {'test': 'param'}]
+    ]
+    )
+async def test_get_all(mocker, max_pages, test_param):
     number_of_calls = 0
 
     class TestClient(http.AIOConnection):
         async def get_json(self, url, params=None):
+            if test_param is None:
+                assert params == {}
             nonlocal number_of_calls
             if number_of_calls < (max_pages - 1):
                 number_of_calls += 1
@@ -357,5 +363,5 @@ async def test_get_all(mocker, max_pages):
     simple_paging_client = TestClient(auth_client)
 
     results = await simple_paging_client.get_all(
-        conftest.API_BASE_URL, {})
+        conftest.API_BASE_URL, params=test_param)
     assert max_pages == len(results)
