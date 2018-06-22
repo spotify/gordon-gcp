@@ -245,16 +245,15 @@ class GDNSPublisher:
         Returns:
             dict containing original additions plus deletions.
         """
-        resp = await self.http_client.get_all(resource_records_url)
-        rrsets = resp['rrsets']
-
         record_name = changes['additions'][0]['name']
         record_type = changes['additions'][0]['type']
 
-        for rec in rrsets:
-            if rec['name'] == record_name and rec['type'] == record_type:
-                changes['deletions'] = [rec]
-                break
+        response = await self.http_client.get_all(resource_records_url)
+        for resp in response:
+            for rec in resp['rrsets']:
+                if rec['name'] == record_name and rec['type'] == record_type:
+                    changes['deletions'] = [rec]
+                    break
 
         return changes
 
