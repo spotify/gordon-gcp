@@ -196,7 +196,7 @@ def handled_conflict_changes_done():
 
 @pytest.fixture
 def all_existing_zone_records():
-    return {
+    return [{
         'kind': 'dns#resourceRecordSetsListResponse',
         'rrsets': [
             {
@@ -210,6 +210,10 @@ def all_existing_zone_records():
                     '1 21600 3600 259200 300'
                 ]
             },
+        ]},
+        {
+        'kind': 'dns#resourceRecordSetsListResponse',
+        'rrsets': [
             {
                 'kind': 'dns#resourceRecordSet',
                 'name': 'service.example.com.',
@@ -217,16 +221,16 @@ def all_existing_zone_records():
                 'ttl': 3600,
                 'rrdatas': ['127.0.0.1']
             }
-        ]
-    }
+        ]},
+    ]
 
 
 @pytest.fixture
 def all_existing_zone_records_empty():
-    return {
+    return [{
         'kind': 'dns#resourceRecordSetsListResponse',
         'rrsets': []
-    }
+    }]
 
 
 @pytest.fixture
