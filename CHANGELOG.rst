@@ -1,6 +1,16 @@
 Changelog
 =========
 
+0.0.1.dev11 (2018-06-25)
+------------------------
+
+Changed
+~~~~~~~
+* Janitor: Skip project if listing instances fails.
+* Extract response rrsets properly.
+* Make params optional when calling http.get_all.
+
+
 0.0.1.dev10 (2018-06-20)
 ------------------------
 
