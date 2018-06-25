@@ -184,16 +184,18 @@ class AIOConnection:
         response = await self.request(method='get', url=url, **kwargs)
         return json_callback(response)
 
-    async def get_all(self, url, params):
+    async def get_all(self, url, params=None):
         """Aggregate data from all pages of an API query.
 
         Args:
             url (str): Google API endpoint URL.
-            params (dict): URL query parameters.
+            params (dict): (optional) URL query parameters.
 
         Returns:
             list: Parsed JSON query response results.
         """
+        if not params:
+            params = {}
         items = []
         next_page_token = None
 
