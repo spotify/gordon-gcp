@@ -327,9 +327,13 @@ class GPSEventConsumer:
         msg = 'Acknowledged message in Pub/Sub.'
         event_msg.append_to_history(msg, self.phase)
 
-        event, thread = self._threads[event_msg._pubsub_msg.message_id]
+        event, thread = self._threads.pop(event_msg._pubsub_msg.message_id)
         event.set()
         thread.stop()
+
+        # sanity check for GC
+        del event
+        del thread
 
         msg_logger.info(f'Message is done processing.')
 

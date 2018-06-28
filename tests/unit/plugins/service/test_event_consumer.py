@@ -380,6 +380,7 @@ async def test_handle_message(mocker, consumer, caplog, pubsub_msg):
     mock_event.set.assert_called_once_with()
     mock_thread.stop.assert_called_once_with()
     assert 2 == len(caplog.records)
+    assert not consumer._threads.get(event_msg.msg_id)
 
 
 #####
