@@ -143,8 +143,14 @@ class GCEAuthority:
     async def _get_instances(self, projects):
         instance_filter = self.config.get('instance_filter')
         for project in projects:
-            yield await self.gce_client.list_instances(
-                project, instance_filter=instance_filter)
+            try:
+                yield await self.gce_client.list_instances(
+                    project, instance_filter=instance_filter)
+            except exceptions.GCPHTTPError as e:
+                logging.warn(
+                    f'Could not fetch instance list for project {project}:'
+                    f'{e}. Skipping this project.')
+                continue
 
     def _create_instance_rrset(self, instance):
         ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']

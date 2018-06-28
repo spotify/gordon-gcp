@@ -20,6 +20,7 @@ import logging
 
 import pytest
 
+from gordon_gcp import exceptions
 from gordon_gcp.clients import gce
 from gordon_gcp.clients import gcrm
 from gordon_gcp.plugins.janitor import authority
@@ -138,6 +139,34 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
     assert expected_msg == (await rrset_channel.get())
     # run also calls self.cleanup at the end
     assert (await rrset_channel.get()) is None
+
+
+@pytest.mark.asyncio
+async def test_run_when_error_raised(
+        caplog, authority_config, get_gce_client, create_mock_coro,
+        instance_data):
+    caplog.set_level(logging.WARN)
+
+    instances = [instance_data]
+    active_projects_mock, active_projects_coro = create_mock_coro()
+    active_projects_mock.return_value = [{'projectId': 1}, {'projectId': 2}]
+    crm_client = get_gce_client(gcrm.GCRMClient)
+    crm_client.list_all_active_projects = active_projects_coro
+
+    list_instances_mock, list_instances_coro = create_mock_coro()
+    list_instances_mock.side_effect = [
+        exceptions.GCPHTTPError('Error!'), instances]
+    gce_client = get_gce_client(gce.GCEClient)
+    gce_client.list_instances = list_instances_coro
+
+    rrset_channel = asyncio.Queue()
+    gce_authority = authority.GCEAuthority(authority_config, crm_client,
+                                           gce_client, rrset_channel)
+
+    await gce_authority.run()
+
+    # warning log project was skipped
+    assert 1 == len(caplog.records)
 
 
 def test_create_msgs_bad_json(caplog, fake_authority):
