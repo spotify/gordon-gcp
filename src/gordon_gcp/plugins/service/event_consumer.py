@@ -37,7 +37,6 @@ import functools
 import json
 import logging
 import os
-import threading
 
 import zope.interface
 from google.api_core import exceptions as google_exceptions
@@ -205,68 +204,23 @@ class GPSEventConsumerBuilder:
 
         logging.info(f'Starting a "{self.config["subscription"]}" subscriber '
                      f'to "{self.config["topic"]}" topic.')
-        return client.subscribe(
-            self.config['subscription'], flow_control=flow_control)
+
+        return client, flow_control
 
     def build_event_consumer(self):
         self._validate_config()
         validator = validate.MessageValidator()
         parser = parse.MessageParser()
         auth_client = self._init_auth()
-        subscription = self._init_subscriber_client(auth_client)
+        subscriber, flow_control = self._init_subscriber_client(auth_client)
         if not self.kwargs.get('loop'):
             self.kwargs['loop'] = asyncio.get_event_loop()
 
         return GPSEventConsumer(
             self.config, self.success_channel, self.error_channel,
-            self.metrics, subscription, validator, parser, **self.kwargs)
-
-
-class _GPSThread(threading.Thread):
-    """Pub/Sub Message-specific thread with its own asyncio event loop.
-
-    .. attention::
-        This thread class is not meant to be worked with directly.
-
-    Google's Pub/Sub library is blocking. This thread class allows us
-    to create work in another thread/loop and not block the main event
-    loop within Gordon.
-
-    Inspiration directly from https://stackoverflow.com/a/29302684
-
-    Args:
-        event (threading.Event): event for thread instance to await
-            signal (via ``event.wait()``) to start work.
-        name (str): thread name
-        daemon (bool): whether the thread should be daemonized or not.
-            Defaults to ``False``.
-    """
-    def __init__(self, event, name=None, daemon=False):
-        super().__init__(name=name, daemon=daemon)
-        self.loop = None
-        self.thread_id = None
-        self.event = event
-
-    def run(self):
-        """Create and start thread's own event loop."""
-        self.loop = asyncio.new_event_loop()
-        self.thread_id = threading.current_thread()
-        self.loop.call_soon(self.event.set)
-        self.loop.run_forever()
-
-    def stop(self):
-        """Stop the thread's event loop. Thread safe."""
-        self.loop.call_soon_threadsafe(self.loop.stop)
-
-    def add_task(self, coro):
-        """Schedule a task to the thread's event loop. Thread safe.
-
-        Args:
-            coro: an asyncio `coroutine <https://docs.python.org/3/
-                library/asyncio-task.html#coroutine>`_ function
-        """
-        f = functools.partial(asyncio.ensure_future, coro, loop=self.loop)
-        self.loop.call_soon_threadsafe(f)
+            self.metrics, subscriber, flow_control, validator, parser,
+            **self.kwargs
+        )
 
 
 @zope.interface.implementer(interfaces.IRunnable, interfaces.IMessageHandler)
@@ -296,19 +250,20 @@ class GPSEventConsumer:
     phase = 'cleanup'
 
     def __init__(self, config, success_channel, error_channel, metrics,
-                 subscriber, validator, parser,  loop, **kwargs):
+                 subscriber, flow_control, validator, parser, loop,
+                 **kwargs):
         self.success_channel = success_channel
         # NOTE: error channel not yet used, but may be in future
         self.error_channel = error_channel
         self.metrics = metrics
         self._subscriber = subscriber
+        self._flow_control = flow_control
         self._subscription = config['subscription']
         self._validator = validator
         self._parser = parser
         self._message_schemas = validator.schemas.keys()
         self._loop = loop
         self._logger = logging.getLogger('')
-        self._threads = {}
 
     async def handle_message(self, event_msg):
         """Ack Pub/Sub message and update event message history.
@@ -326,10 +281,6 @@ class GPSEventConsumer:
 
         msg = 'Acknowledged message in Pub/Sub.'
         event_msg.append_to_history(msg, self.phase)
-
-        event, thread = self._threads[event_msg._pubsub_msg.message_id]
-        event.set()
-        thread.stop()
 
         msg_logger.info(f'Message is done processing.')
 
@@ -380,20 +331,12 @@ class GPSEventConsumer:
         coro = self.success_channel.put(event_msg)
         asyncio.run_coroutine_threadsafe(coro, self._loop)
 
-    def _thread_pubsub_msg(self, pubsub_msg):
-        # Create a new thread with its own event loop to process the
-        # pubsub message.
-        event = threading.Event()
-        thread_name = f'GPSThread_msg-id_{pubsub_msg.message_id}'
-        thread = _GPSThread(event, name=thread_name, daemon=True)
-        thread.start()
-        # Block signal to the thread before start accepting tasks
-        # Let the loop's signal us, rather than sleeping
-        event.wait()
-        thread.add_task(self._handle_pubsub_msg(pubsub_msg))
-
-        # save thread to stop/clean up during self.cleanup
-        self._threads[pubsub_msg.message_id] = (event, thread)
+    def _schedule_pubsub_msg(self, pubsub_msg):
+        # schedule future back on the main event loop thread
+        coro = self._handle_pubsub_msg(pubsub_msg)
+        task = functools.partial(asyncio.ensure_future, coro, loop=self._loop)
+        # we're in another thread here separate from the main event loop
+        self._loop.call_soon_threadsafe(task)
 
     def _manage_subs(self):
         # NOTE: automatically extends deadline in the background;
@@ -401,7 +344,11 @@ class GPSEventConsumer:
         #       `nack` in this plugin since it'll just get redelivered.
         #       A dead process will also timeout the message, with which
         #       it will redeliver.
-        future = self._subscriber.open(self._thread_pubsub_msg)
+        future = self._subscriber.subscribe(
+            self._subscription,
+            self._schedule_pubsub_msg,
+            flow_control=self._flow_control
+        )
 
         try:
             # we're running in a threadpool because this is blocking

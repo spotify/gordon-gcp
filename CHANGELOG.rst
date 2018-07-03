@@ -1,6 +1,29 @@
 Changelog
 =========
 
+
+0.0.1.dev13 (2018-07-03)
+------------------------
+
+Changed
+~~~~~~~
+
+* Update gordon-cloud-pubsub version to ``0.35.4``.
+
+Removed
+~~~~~~~
+
+* Remove the use of ``_GPSThreads``.
+
+
+0.0.1.dev12 (2018-06-28)
+------------------------
+
+Fixed
+~~~~~
+* Clean up GPThread instances once done.
+
+
 0.0.1.dev11 (2018-06-25)
 ------------------------
 

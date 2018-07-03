@@ -152,17 +152,26 @@ def subscriber_client(mocker, monkeypatch):
     mock = mocker.MagicMock(pubsub.SubscriberClient)
     patch = f'{MOD_PATCH}.pubsub.SubscriberClient'
     monkeypatch.setattr(patch, mock)
-    return mock.subscribe.return_value
+    return mock.return_value
 
 
-def test_event_consumer_default(mocker, subscriber_client, validator, parser,
-                                event_loop, channel_pair, metrics):
+@pytest.fixture
+def flow_control(mocker, monkeypatch):
+    mock = mocker.Mock()
+    patch = f'{MOD_PATCH}.types.FlowControl'
+    monkeypatch.setattr(patch, mock)
+    return mock
+
+
+def test_event_consumer_default(mocker, subscriber_client, flow_control,
+                                validator, parser, event_loop, channel_pair,
+                                metrics):
     """GPSEventConsumer implements IEventConsumerClient"""
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
     success, error = channel_pair
     client = event_consumer.GPSEventConsumer(
-        config, success, error, metrics, subscriber_client, validator, parser,
-        event_loop)
+        config, success, error, metrics, subscriber_client, flow_control,
+        validator, parser, event_loop)
 
     assert interfaces.IRunnable.providedBy(client)
     assert interfaces.IRunnable.implementedBy(event_consumer.GPSEventConsumer)
@@ -182,13 +191,14 @@ def test_event_consumer_default(mocker, subscriber_client, validator, parser,
 
 
 @pytest.fixture
-def consumer(subscriber_client, validator, event_loop, channel_pair, metrics):
+def consumer(subscriber_client, flow_control, validator, event_loop,
+             channel_pair, metrics):
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
     success, error = channel_pair
     parser = parse.MessageParser()
     client = event_consumer.GPSEventConsumer(
-        config, success, error, metrics, subscriber_client, validator, parser,
-        event_loop)
+        config, success, error, metrics, subscriber_client, flow_control,
+        validator, parser, event_loop)
     return client
 
 
@@ -197,52 +207,76 @@ async def test_run(consumer):
     """Consumer starts consuming from a Pub/Sub subscription."""
     await consumer.run()
 
-    consumer._subscriber.open.assert_called_once_with(
-        consumer._thread_pubsub_msg)
+    consumer._subscriber.subscribe.assert_called_once_with(
+        consumer._subscription,
+        consumer._schedule_pubsub_msg,
+        flow_control=consumer._flow_control
+    )
 
 
 def test_manage_subs(consumer):
     consumer._manage_subs()
-    exp_callback = consumer._thread_pubsub_msg
-    consumer._subscriber.open.assert_called_once_with(exp_callback)
+    exp_callback = consumer._schedule_pubsub_msg
+    consumer._subscriber.subscribe.assert_called_once_with(
+        consumer._subscription,
+        exp_callback,
+        flow_control=consumer._flow_control
+    )
 
 
 def test_manage_subs_raises(consumer, caplog):
     msg = 'foo'
     exc = Exception(msg)
-    consumer._subscriber.open.return_value.result.side_effect = [exc]
+    consumer._subscriber.subscribe.return_value.result.side_effect = [exc]
 
     with pytest.raises(exceptions.GCPGordonError, match=msg):
         consumer._manage_subs()
 
-    exp_callback = consumer._thread_pubsub_msg
-    consumer._subscriber.open.assert_called_once_with(exp_callback)
+    exp_callback = consumer._schedule_pubsub_msg
+    consumer._subscriber.subscribe.assert_called_once_with(
+        consumer._subscription,
+        exp_callback,
+        flow_control=consumer._flow_control
+    )
     consumer._subscriber.close.assert_called_once_with()
 
     assert 1 == len(caplog.records)
 
 
-def test_thread_pubsub_msg(consumer, event, pubsub_msg, mocker, monkeypatch):
-    thread = mocker.Mock(event_consumer._GPSThread)
-    monkeypatch.setattr(f'{MOD_PATCH}._GPSThread', thread)
-    monkeypatch.setattr(f'{MOD_PATCH}.threading.Event', event)
+class CustomLoop:
+    def __init__(self, mocker, event_loop):
+        self._call_soon_ts_mock = mocker.Mock()
+        self._event_loop = event_loop
+        self._task_list = []
 
-    async def noop(*args, **kwargs):
+    def create_task(self, coro_or_future):
+        return self._event_loop.create_task(coro_or_future)
+
+    def call_soon_threadsafe(self, *args, **kwargs):
+        self._call_soon_ts_mock(*args, **kwargs)
+        task = args[0]
+        self._task_list.append(task())
+
+
+@pytest.mark.asyncio
+async def test_schedule_pubsub_msg(pubsub_msg, consumer, mocker, monkeypatch,
+                                   event_loop):
+
+    custom_loop = CustomLoop(mocker, event_loop)
+    monkeypatch.setattr(consumer, '_loop', custom_loop)
+
+    async def _mock(*args, **kwargs):
         await asyncio.sleep(0)
 
-    monkeypatch.setattr(consumer, '_handle_pubsub_msg', lambda x: noop)
+    monkeypatch.setattr(consumer, '_handle_pubsub_msg', _mock)
 
-    consumer._thread_pubsub_msg(pubsub_msg)
+    consumer._schedule_pubsub_msg(pubsub_msg)
 
-    thread.assert_called_once_with(
-        event.return_value, 'GPSThread_msg-id_1234', daemon=True)
+    custom_loop._call_soon_ts_mock.assert_called_once()
+    assert 1 == len(custom_loop._task_list)
 
-    ret_thread, ret_event = thread.return_value, event.return_value
-    ret_thread.start.assert_called_once_with()
-    ret_event.wait.assert_called_once_with()
-    ret_thread.add_task.assert_called_once_with(
-        consumer._handle_pubsub_msg(pubsub_msg))
-    assert ret_event, ret_thread == consumer._threads[pubsub_msg.message_id]
+    # to avoid "task pending destroyed" warnings from pytest
+    await custom_loop._task_list[0]
 
 
 @pytest.fixture
@@ -363,9 +397,6 @@ async def test_handle_message(mocker, consumer, caplog, pubsub_msg):
     mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
 
     event_msg = event_consumer.GEventMessage(pubsub_msg, {})
-    mock_event = mocker.Mock(threading.Event)
-    mock_thread = mocker.Mock(event_consumer._GPSThread)
-    consumer._threads[event_msg.msg_id] = (mock_event, mock_thread)
 
     await consumer.handle_message(event_msg)
 
@@ -377,80 +408,4 @@ async def test_handle_message(mocker, consumer, caplog, pubsub_msg):
         'message': 'Acknowledged message in Pub/Sub.',
     }
     assert exp_entry in event_msg.history_log
-    mock_event.set.assert_called_once_with()
-    mock_thread.stop.assert_called_once_with()
     assert 2 == len(caplog.records)
-
-
-#####
-# _GPSThread tests
-#####
-def test_create_gpsthread(thread, event):
-    gps_thread = event_consumer._GPSThread(event)
-
-    assert not gps_thread.loop
-    assert not gps_thread.thread_id
-    assert event is gps_thread.event
-
-
-class CustomLoop(asyncio.BaseEventLoop):
-    def run_forever(self):
-        # so we don't _actually_ run forever
-        pass
-
-    def stop(self):
-        pass
-
-    def call_soon_threadsafe(self, *args, **kwargs):
-        pass
-
-
-@pytest.fixture
-def custom_event_loop():
-    return CustomLoop()
-
-
-def test_gpsthread_run(thread, event, custom_event_loop, monkeypatch):
-    monkeypatch.setattr(NEW_EV_PATCH, lambda: custom_event_loop)
-
-    gps_thread = event_consumer._GPSThread(event)
-    gps_thread.run()
-
-    assert custom_event_loop is gps_thread.loop
-    current_id = threading.current_thread()
-    assert current_id == gps_thread.thread_id
-
-    # cleanup
-    gps_thread.stop()
-
-
-def test_gpsthread_stop(thread, event, custom_event_loop):
-    gps_thread = event_consumer._GPSThread(event)
-    gps_thread.loop = custom_event_loop
-
-    gps_thread.stop()
-
-    assert not gps_thread.thread_id
-    assert not gps_thread.loop.is_running()
-
-
-# NOTE: This test will emit a warning about the `noop` task not being
-#       awaited. This is okay since we're not testing that bit
-@pytest.mark.filterwarnings('ignore:coroutine')
-def test_gpsthread_add_task(mocker, monkeypatch):
-    mock_loop = mocker.Mock(asyncio.BaseEventLoop)
-    monkeypatch.setattr(NEW_EV_PATCH, mock_loop)
-
-    event = threading.Event()
-    gps_thread = event_consumer._GPSThread(event)
-    gps_thread.start()
-
-    async def noop():
-        await asyncio.sleep(0)
-
-    gps_thread.add_task(noop())
-
-    gps_thread.loop.call_soon_threadsafe.assert_called_once()
-
-    # cleanup
-    gps_thread.stop()

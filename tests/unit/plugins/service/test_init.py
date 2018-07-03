@@ -19,7 +19,7 @@ import asyncio
 import pytest
 from google.api_core import exceptions as google_exceptions
 from google.cloud import pubsub
-from google.cloud.pubsub_v1.subscriber.policy import thread
+
 
 from gordon_gcp import exceptions
 from gordon_gcp.plugins import service
@@ -42,7 +42,7 @@ def consumer_config(fake_keyfile):
 def subscriber_client(mocker, monkeypatch):
     mock = mocker.Mock(pubsub.SubscriberClient)
     # what is actually returned from client.create_subscription
-    mock_sub = mocker.Mock(thread.Policy)
+    mock_sub = mocker.Mock()
     mock.return_value.create_subscription.return_value = mock_sub
     patch = 'gordon_gcp.plugins.service.event_consumer.pubsub.SubscriberClient'
     monkeypatch.setattr(patch, mock)
