@@ -152,17 +152,26 @@ def subscriber_client(mocker, monkeypatch):
     mock = mocker.MagicMock(pubsub.SubscriberClient)
     patch = f'{MOD_PATCH}.pubsub.SubscriberClient'
     monkeypatch.setattr(patch, mock)
-    return mock.subscribe.return_value
+    return mock.return_value
 
 
-def test_event_consumer_default(mocker, subscriber_client, validator, parser,
-                                event_loop, channel_pair, metrics):
+@pytest.fixture
+def flow_control(mocker, monkeypatch):
+    mock = mocker.Mock()
+    patch = f'{MOD_PATCH}.types.FlowControl'
+    monkeypatch.setattr(patch, mock)
+    return mock
+
+
+def test_event_consumer_default(mocker, subscriber_client, flow_control,
+                                validator, parser, event_loop, channel_pair,
+                                metrics):
     """GPSEventConsumer implements IEventConsumerClient"""
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
     success, error = channel_pair
     client = event_consumer.GPSEventConsumer(
-        config, success, error, metrics, subscriber_client, validator, parser,
-        event_loop)
+        config, success, error, metrics, subscriber_client, flow_control,
+        validator, parser, event_loop)
 
     assert interfaces.IRunnable.providedBy(client)
     assert interfaces.IRunnable.implementedBy(event_consumer.GPSEventConsumer)
@@ -182,13 +191,14 @@ def test_event_consumer_default(mocker, subscriber_client, validator, parser,
 
 
 @pytest.fixture
-def consumer(subscriber_client, validator, event_loop, channel_pair, metrics):
+def consumer(subscriber_client, flow_control, validator, event_loop,
+             channel_pair, metrics):
     config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
     success, error = channel_pair
     parser = parse.MessageParser()
     client = event_consumer.GPSEventConsumer(
-        config, success, error, metrics, subscriber_client, validator, parser,
-        event_loop)
+        config, success, error, metrics, subscriber_client, flow_control,
+        validator, parser, event_loop)
     return client
 
 
@@ -197,26 +207,37 @@ async def test_run(consumer):
     """Consumer starts consuming from a Pub/Sub subscription."""
     await consumer.run()
 
-    consumer._subscriber.open.assert_called_once_with(
-        consumer._thread_pubsub_msg)
+    consumer._subscriber.subscribe.assert_called_once_with(
+        consumer._subscription,
+        consumer._thread_pubsub_msg,
+        flow_control=consumer._flow_control
+    )
 
 
 def test_manage_subs(consumer):
     consumer._manage_subs()
     exp_callback = consumer._thread_pubsub_msg
-    consumer._subscriber.open.assert_called_once_with(exp_callback)
+    consumer._subscriber.subscribe.assert_called_once_with(
+        consumer._subscription,
+        exp_callback,
+        flow_control=consumer._flow_control
+    )
 
 
 def test_manage_subs_raises(consumer, caplog):
     msg = 'foo'
     exc = Exception(msg)
-    consumer._subscriber.open.return_value.result.side_effect = [exc]
+    consumer._subscriber.subscribe.return_value.result.side_effect = [exc]
 
     with pytest.raises(exceptions.GCPGordonError, match=msg):
         consumer._manage_subs()
 
     exp_callback = consumer._thread_pubsub_msg
-    consumer._subscriber.open.assert_called_once_with(exp_callback)
+    consumer._subscriber.subscribe.assert_called_once_with(
+        consumer._subscription,
+        exp_callback,
+        flow_control=consumer._flow_control
+    )
     consumer._subscriber.close.assert_called_once_with()
 
     assert 1 == len(caplog.records)

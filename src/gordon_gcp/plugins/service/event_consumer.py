@@ -205,21 +205,23 @@ class GPSEventConsumerBuilder:
 
         logging.info(f'Starting a "{self.config["subscription"]}" subscriber '
                      f'to "{self.config["topic"]}" topic.')
-        return client.subscribe(
-            self.config['subscription'], flow_control=flow_control)
+
+        return client, flow_control
 
     def build_event_consumer(self):
         self._validate_config()
         validator = validate.MessageValidator()
         parser = parse.MessageParser()
         auth_client = self._init_auth()
-        subscription = self._init_subscriber_client(auth_client)
+        subscriber, flow_control = self._init_subscriber_client(auth_client)
         if not self.kwargs.get('loop'):
             self.kwargs['loop'] = asyncio.get_event_loop()
 
         return GPSEventConsumer(
             self.config, self.success_channel, self.error_channel,
-            self.metrics, subscription, validator, parser, **self.kwargs)
+            self.metrics, subscriber, flow_control, validator, parser,
+            **self.kwargs
+        )
 
 
 class _GPSThread(threading.Thread):
@@ -296,12 +298,14 @@ class GPSEventConsumer:
     phase = 'cleanup'
 
     def __init__(self, config, success_channel, error_channel, metrics,
-                 subscriber, validator, parser,  loop, **kwargs):
+                 subscriber, flow_control, validator, parser,  loop,
+                 **kwargs):
         self.success_channel = success_channel
         # NOTE: error channel not yet used, but may be in future
         self.error_channel = error_channel
         self.metrics = metrics
         self._subscriber = subscriber
+        self._flow_control = flow_control
         self._subscription = config['subscription']
         self._validator = validator
         self._parser = parser
@@ -405,7 +409,11 @@ class GPSEventConsumer:
         #       `nack` in this plugin since it'll just get redelivered.
         #       A dead process will also timeout the message, with which
         #       it will redeliver.
-        future = self._subscriber.open(self._thread_pubsub_msg)
+        future = self._subscriber.subscribe(
+            self._subscription,
+            self._thread_pubsub_msg,
+            flow_control=self._flow_control
+        )
 
         try:
             # we're running in a threadpool because this is blocking
