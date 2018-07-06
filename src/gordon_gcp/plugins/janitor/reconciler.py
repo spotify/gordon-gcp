@@ -240,6 +240,32 @@ class GDNSReconciler:
 
         return zone, rrsets
 
+    def _remove_soa_and_root_ns(self, zone, rrsets):
+        """Given a list of GCPResourceRecordSets, remove SOA and root NS.
+
+        This is necessary because Google won't let you override its SOA and root
+        NS records.
+
+        Returns a new list (doesn't modify in place).
+
+        Args:
+            zone (str): The domain name the rrsets are for, including trailing
+                dot.
+            rrsets (list[GCPResourceRecordSet]): The GCPResourceRecordSets to
+                filter.
+
+        Returns:
+            list[GCPResourceRecordSet]: The filtered GCPResourceRecordSets.
+        """
+        clean_rrsets = []
+        for rrset in rrsets:
+            if rrset.type == 'SOA':
+                continue
+            if rrset.type == 'NS' and rrset.name == zone:
+                continue
+            clean_rrsets.append(rrset)
+        return clean_rrsets
+
     async def validate_rrsets_by_zone(self, zone, rrsets):
         """Given a zone, validate current versus desired rrsets.
 
@@ -264,13 +290,13 @@ class GDNSReconciler:
         missing_rrsets = [
             rs for rs in desired_rrsets if rs not in actual_rrsets
         ]
+        # don't try to add root SOA/NS records
+        missing_rrsets = self._remove_soa_and_root_ns(zone, missing_rrsets)
+
         msg = (f'[{zone}] Processed {len(actual_rrsets)} rrset messages '
                f'and found {len(missing_rrsets)} missing rrsets.')
         logging.info(msg)
-        # TODO (lynn): emit or incr metric of missing_rrsets by zone once
-        #              aioshumway is released
-        # TODO: (FEATURE): have separate metrics for additions and deletions
-        await self.publish_change_messages(missing_rrsets, action='additions')
+        return missing_rrsets
 
     async def run(self):
         """Start consuming from :obj:`rrset_channel`.
@@ -286,7 +312,14 @@ class GDNSReconciler:
             # TODO: emit metric of message received once aioshumway is released
             try:
                 zone, raw_rrsets = self._parse_rrset_message(desired_rrset)
-                await self.validate_rrsets_by_zone(zone, raw_rrsets)
+                missing_rrsets = await self.validate_rrsets_by_zone(
+                    zone, raw_rrsets)
+                # TODO (lynn): emit or incr metric of missing_rrsets by zone
+                # once aioshumway is released
+                # TODO: (FEATURE): have separate metrics for additions and
+                # deletions
+                await self.publish_change_messages(
+                    missing_rrsets, action='additions')
             except exceptions.GCPGordonJanitorError as e:
                 msg = f'Dropping message {desired_rrset}: {e}'
                 logging.error(msg, exc_info=e)
