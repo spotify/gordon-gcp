@@ -206,14 +206,18 @@ class GCEAuthority:
         instances = await self._get_instances(projects)
 
         for rrset_msg in self._create_msgs(instances):
+            # TODO: emit an actual metric
+            zone = rrset_msg['zone']
+            rrsets = rrset_msg['rrsets']
+            msg = f'[{zone}] Found {len(rrsets)} rrsets for zone in GCE.'
+            logging.info(msg)
             await self.rrset_channel.put(rrset_msg)
-        # TODO: emit a metric of domain records created per zone and project.
 
         await self.cleanup()
 
     async def cleanup(self):
         """Clean up after a run."""
-        msg = 'Finished sending record messages to the reconciler.'
+        msg = 'Finished processing GCE data.'
         logging.info(msg)
         await self.rrset_channel.put(None)
         await self.gce_client._session.close()
