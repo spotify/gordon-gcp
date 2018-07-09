@@ -34,7 +34,8 @@ def test_create_gcp_rrset():
         'name': 'test',
         'type': 'A',
         'rrdatas': ['10.1.2.3'],
-        'ttl': 500
+        'ttl': 500,
+        'kind': 'dns#resourceRecordSet'
     }
     rrset = gdns.GCPResourceRecordSet(**data)
     assert data == attr.asdict(rrset)
