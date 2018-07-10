@@ -75,9 +75,9 @@ class GCPResourceRecordSet:
     #   between all of gordon* packages. It will also make use of attrs
     #   ability to optionally validate upon creation.
     name = attr.ib(type=str)
-    kind = attr.ib(type=str)
     type = attr.ib(type=str)
     rrdatas = attr.ib(type=list)
+    kind = attr.ib(type=str, default='dns#resourceRecordSet')
     ttl = attr.ib(type=int, default=300)
 
 
