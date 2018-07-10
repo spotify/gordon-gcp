@@ -148,7 +148,7 @@ def create_mock_coro(mocker):
 
 
 @pytest.fixture(scope='session')
-def audit_log_data():
+def creation_audit_log_data():
     resource_name = ('projects/123456789101/zones/us-central1-c/instances/'
                      'an-instance-name-b34c')
     return {
@@ -159,12 +159,12 @@ def audit_log_data():
 
 
 @pytest.fixture
-def gevent_msg(mocker, audit_log_data):
+def additions_gevent_msg(mocker, creation_audit_log_data):
     fake_data = {
-            'action': audit_log_data['action'],
-            'resourceName': audit_log_data['resourceName'],
+            'action': creation_audit_log_data['action'],
+            'resourceName': creation_audit_log_data['resourceName'],
             'resourceRecords': [],
-            'timestamp': audit_log_data['timestamp']
+            'timestamp': creation_audit_log_data['timestamp']
         }
     pubsub_msg = mocker.Mock()
     pubsub_msg._ack_id = '1:1'
