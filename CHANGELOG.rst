@@ -1,6 +1,15 @@
 Changelog
 =========
 
+0.0.1.dev14 (2018-07-10)
+------------------------
+
+Added
+~~~~~
+
+* Add ``kind`` attribute to ``GCPResourceRecordSet`` object.
+* Add request concurrency to GCE listing of instances.
+
 
 0.0.1.dev13 (2018-07-03)
 ------------------------
