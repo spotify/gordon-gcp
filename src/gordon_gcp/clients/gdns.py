@@ -61,6 +61,8 @@ class GCPResourceRecordSet:
 
     Args:
         name (str): Name/label.
+        kind (str): ID for what kind of GCP resource this is. For example
+            'dns#resourceRecordSet'
         type (str): Record type (see `Google's supported records
             <https://cloud.google.com/dns/overview#supported_dns_record_
             types>`_ for valid types).
@@ -75,6 +77,7 @@ class GCPResourceRecordSet:
     name = attr.ib(type=str)
     type = attr.ib(type=str)
     rrdatas = attr.ib(type=list)
+    kind = attr.ib(type=str, default='dns#resourceRecordSet')
     ttl = attr.ib(type=int, default=300)
 
 
@@ -119,7 +122,8 @@ class GDNSClient(http.AIOConnection):
 
         # to limit the amount of data across the wire; also makes it
         # easier to create GCPResourceRecordSet instances
-        fields = 'rrsets/name,rrsets/rrdatas,rrsets/type,rrsets/ttl'
+        fields = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
+                  'rrsets/type,rrsets/ttl')
         params = {
             'fields': fields,
         }

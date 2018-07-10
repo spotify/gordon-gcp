@@ -44,14 +44,16 @@ def fake_response_data():
                 'ttl': 300,
                 'rrdatas': [
                     '10.1.2.3',
-                ]
+                ],
+                'kind': 'dns#resourceRecordSet'
             }, {
                 'name': 'b-test.example.net.',
                 'type': 'CNAME',
                 'ttl': 600,
                 'rrdatas': [
                     'a-test.example.net.',
-                ]
+                ],
+                'kind': 'dns#resourceRecordSet'
             }, {
                 'name': 'c-test.example.net.',
                 'type': 'TXT',
@@ -59,7 +61,8 @@ def fake_response_data():
                 'rrdatas': [
                     '"OHAI"',
                     '"OYE"',
-                ]
+                ],
+                'kind': 'dns#resourceRecordSet'
             }
         ]
     }

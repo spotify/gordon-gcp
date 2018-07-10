@@ -40,6 +40,7 @@ To use:
     # prints: {'zone': 'example.com', 'resourceRecords': [...]}
 """
 
+import asyncio
 import logging
 
 import aiohttp
@@ -140,17 +141,31 @@ class GCEAuthority:
         # project - blacklist.
         return sorted(projects - project_blacklist)
 
+    def _filter_results(self, projects, results):
+        successful_results = []
+        for index, result in enumerate(results):
+            if isinstance(result, exceptions.GCPHTTPError):
+                project = projects[index]
+                msg = (f'Could not fetch instance list for project {project}: '
+                       f'{result}. Skipping this project.')
+                logging.warn(msg)
+            else:
+                successful_results.extend(result)
+
+        return successful_results
+
     async def _get_instances(self, projects):
         instance_filter = self.config.get('instance_filter')
+
+        coros = set()
         for project in projects:
-            try:
-                yield await self.gce_client.list_instances(
-                    project, instance_filter=instance_filter)
-            except exceptions.GCPHTTPError as e:
-                logging.warn(
-                    f'Could not fetch instance list for project {project}:'
-                    f'{e}. Skipping this project.')
-                continue
+            coro = self.gce_client.list_instances(
+                project, instance_filter=instance_filter)
+            coros.add(coro)
+
+        all_results = await asyncio.gather(*coros, return_exceptions=True)
+
+        return self._filter_results(projects, all_results)
 
     def _create_instance_rrset(self, instance):
         ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
@@ -183,10 +198,7 @@ class GCEAuthority:
         """Batch instance data and send it to the :obj:`self.rrset_channel`.
         """
         projects = await self._get_projects()
-
-        instances = []
-        async for project_instances in self._get_instances(projects):
-            instances.extend(project_instances)
+        instances = await self._get_instances(projects)
 
         for rrset_msg in self._create_msgs(instances):
             await self.rrset_channel.put(rrset_msg)
