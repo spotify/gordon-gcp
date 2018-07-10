@@ -34,11 +34,43 @@ def instance_data(creation_audit_log_data):
 
 
 @pytest.fixture
+def records_data(config, deletions_gevent_msg):
+    fqdn = ('.'.join([deletions_gevent_msg.data['resourceName']
+                     .split('/')[-1], config['dns_zone']]))
+    return [
+        {
+            'kind': 'dns#resourceRecordSet',
+            'name': fqdn,
+            'type': 'A',
+            'ttl': 300,
+            'rrdatas': ['127.0.0.1']
+        },
+        {
+            'kind': 'dns#resourceRecordSet',
+            'name': fqdn,
+            'type': 'TXT',
+            'ttl': 300,
+            'rrdatas': ['TEXT VAL HERE']
+        }
+    ]
+
+
+@pytest.fixture
+def get_all_response_data(records_data):
+    return [{
+        'kind': 'dns#resourceRecordSetsListResponse',
+        'rrsets': records_data
+    }]
+
+
+@pytest.fixture
 def config(fake_keyfile):
     return {
         'keyfile': fake_keyfile,
         'scopes': [],
         'dns_zone': 'example.com.',
+        'managed_zone': 'example-com',
+        'project': 'gcp-proj-dns',
         'default_ttl': 300,
         'retries': 5
     }
@@ -57,9 +89,12 @@ def test_implements_interface(mocker, config, metrics):
 @pytest.fixture
 def mock_http_client(mocker, create_mock_coro):
     get_json_mock, get_json_coro = create_mock_coro()
+    get_all_mock, get_all_coro = create_mock_coro()
     http_client = mocker.Mock()
     mocker.patch.object(http_client, 'get_json', get_json_coro)
     mocker.patch.object(http_client, '_get_json_mock', get_json_mock)
+    mocker.patch.object(http_client, 'get_all', get_all_coro)
+    mocker.patch.object(http_client, '_get_all_mock', get_all_mock)
     return http_client
 
 
@@ -93,7 +128,7 @@ async def test_handle_message_doesnt_need_enriching(
 async def test_handle_message_event_msg_additions(
         mocker, config, additions_gevent_msg, mock_async_sleep, gce_enricher,
         caplog, instance_data, sleep_calls, logs_logged):
-    """Successfully enrich event message."""
+    """Successfully enrich event message with records to add."""
     instance_mocked_data = []
     for i in range(sleep_calls):
         instance_mocked_data.append({})
@@ -104,8 +139,8 @@ async def test_handle_message_event_msg_additions(
     await gce_enricher.handle_message(additions_gevent_msg)
 
     expected_history_msg = 'Enriched msg with 1 resource record(s).'
-    assert expected_history_msg == \
-        additions_gevent_msg.history_log[0]['message']
+    assert (expected_history_msg ==
+            additions_gevent_msg.history_log[0]['message'])
     assert 'enrich' == additions_gevent_msg.history_log[0]['plugin']
     assert 1 == len(additions_gevent_msg.data['resourceRecords'])
     expected_rrecords = [{
@@ -132,17 +167,33 @@ async def test_handle_message_event_msg_additions(
 async def test_handle_message_event_msg_additions_failures(
         mocker, additions_gevent_msg, mock_async_sleep, gce_enricher, caplog,
         response, sleep_calls, logs_logged, err_msg):
-    """Raise error while enriching event message."""
+    """Raise error while enriching event message with additions."""
     gce_enricher._http_client._get_json_mock.side_effect = response
     additions_gevent_msg.phase = 'enrich'
 
     with pytest.raises(exceptions.GCPGordonError) as e:
         await gce_enricher.handle_message(additions_gevent_msg)
 
-    assert 'enrich' == additions_gevent_msg.phase
     assert sleep_calls == mock_async_sleep.call_count
     assert logs_logged == len(caplog.records)
     expected_msg = ('Could not get necessary information for '
                     'projects/123456789101/zones/us-central1-c/'
                     f'instances/an-instance-name-b34c: {err_msg}')
     assert e.match(expected_msg)
+
+
+@pytest.mark.asyncio
+async def test_handle_message_event_msg_deletions(
+        mocker, config, deletions_gevent_msg, gce_enricher, caplog,
+        records_data, get_all_response_data):
+    """Successfully enrich event message with records to delete."""
+    gce_enricher._http_client._get_all_mock.return_value = get_all_response_data
+
+    await gce_enricher.handle_message(deletions_gevent_msg)
+
+    expected_history_msg = 'Enriched msg with 2 resource record(s).'
+    expected_rrecords = records_data
+    assert (expected_history_msg ==
+            deletions_gevent_msg.history_log[0]['message'])
+    assert 'enrich' == deletions_gevent_msg.history_log[0]['plugin']
+    assert expected_rrecords == deletions_gevent_msg.data['resourceRecords']

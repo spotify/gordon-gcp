@@ -193,7 +193,12 @@ def test_get_event_consumer_sub_exists(consumer_config, auth_client,
 #####
 @pytest.fixture
 def enricher_config(fake_keyfile):
-    return {'keyfile': fake_keyfile, 'dns_zone': 'example.com.'}
+    return {
+        'keyfile': fake_keyfile,
+        'dns_zone': 'example.com.',
+        'managed_zone': 'example-com',
+        'project': 'gcp-proj-dns',
+    }
 
 
 @pytest.mark.parametrize('conf_retries,retries', [
@@ -216,7 +221,13 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
 @pytest.mark.parametrize('config_key,exc_msg', [
     ('keyfile', 'The path to a Service Account JSON keyfile is required to '
                 'authenticate to the GCE API.'),
-    ('dns_zone', 'A dns zone is required to build correct A records.')])
+    ('dns_zone', 'A dns zone is required to build correct A records.'),
+    ('managed_zone', 'The name of the Google Cloud DNS managed zone is '
+                     'required to correctly delete A records for deleted '
+                     'instances'),
+    ('project', 'The GCP project that contains the Google Cloud DNS managed '
+                'zone is required to correctly delete A records for deleted '
+                'instances.')])
 def test_get_enricher_missing_config_raises(mocker, caplog, enricher_config,
                                             auth_client, config_key, exc_msg,
                                             metrics):
