@@ -215,25 +215,24 @@ class GCEEnricher:
                 fqdn, external_ip, default_ttl, msg_logger)
         ]
 
-    async def _get_matching_records(self, instance_resource_url):
+    # The types of records that this returns for deletion should match the
+    # types of records that are created above in the _create_rrecords method
+    async def _get_matching_records_for_deletion(self, instance_resource_url):
         # Get the fqdn of the instance
         instance_name = instance_resource_url.split('/')[-1]
         fqdn = self._get_fqdn(instance_name)
 
-        # Get all Google DNS records for the managed zone
+        # Get the Google DNS A records for managed zone with name matching the
+        # instance fqdn
         project = self.config['project']
         managed_zone = self.config['managed_zone']
         resource_records_url = GCEEnricher.RESOURCE_RECORDS_ENDPOINT.format(
             project=project, managedZone=managed_zone)
-        response = await self._http_client.get_all(resource_records_url)
 
-        # Get the Google DNS A records with name matching the instance fqdn
-        matching_records = []
-        for resp in response:
-            for rec in resp['rrsets']:
-                if rec['name'] == fqdn:
-                    matching_records.append(rec)
-        return matching_records
+        search_params = {'name': fqdn, 'type': 'A'}
+        response = await self._http_client.get_json(
+            resource_records_url, params=search_params)
+        return response['rrsets']
 
     async def handle_message(self, event_message):
         """
@@ -265,7 +264,8 @@ class GCEEnricher:
                 event_message.data, instance_data, msg_logger)
         elif event_message.data['action'] == 'deletions':
             instance_resource_url = event_message.data['resourceName']
-            records = await self._get_matching_records(instance_resource_url)
+            records = await self._get_matching_records_for_deletion(
+                instance_resource_url)
         msg_logger.debug(f'Enriched with resource record(s): {records}')
         event_message.data['resourceRecords'].extend(records)
         msg = (f"Enriched msg with {len(event_message.data['resourceRecords'])}"

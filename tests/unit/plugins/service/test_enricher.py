@@ -44,23 +44,16 @@ def records_data(config, deletions_gevent_msg):
             'type': 'A',
             'ttl': 300,
             'rrdatas': ['127.0.0.1']
-        },
-        {
-            'kind': 'dns#resourceRecordSet',
-            'name': fqdn,
-            'type': 'TXT',
-            'ttl': 300,
-            'rrdatas': ['TEXT VAL HERE']
         }
     ]
 
 
 @pytest.fixture
-def get_all_response_data(records_data):
-    return [{
+def get_json_response_data(records_data):
+    return {
         'kind': 'dns#resourceRecordSetsListResponse',
         'rrsets': records_data
-    }]
+    }
 
 
 @pytest.fixture
@@ -89,12 +82,9 @@ def test_implements_interface(mocker, config, metrics):
 @pytest.fixture
 def mock_http_client(mocker, create_mock_coro):
     get_json_mock, get_json_coro = create_mock_coro()
-    get_all_mock, get_all_coro = create_mock_coro()
     http_client = mocker.Mock()
     mocker.patch.object(http_client, 'get_json', get_json_coro)
     mocker.patch.object(http_client, '_get_json_mock', get_json_mock)
-    mocker.patch.object(http_client, 'get_all', get_all_coro)
-    mocker.patch.object(http_client, '_get_all_mock', get_all_mock)
     return http_client
 
 
@@ -185,13 +175,14 @@ async def test_handle_message_event_msg_additions_failures(
 @pytest.mark.asyncio
 async def test_handle_message_event_msg_deletions(
         mocker, config, deletions_gevent_msg, gce_enricher, caplog,
-        records_data, get_all_response_data):
+        records_data, get_json_response_data):
     """Successfully enrich event message with records to delete."""
-    gce_enricher._http_client._get_all_mock.return_value = get_all_response_data
+    gce_enricher._http_client._get_json_mock.return_value = (
+        get_json_response_data)
 
     await gce_enricher.handle_message(deletions_gevent_msg)
 
-    expected_history_msg = 'Enriched msg with 2 resource record(s).'
+    expected_history_msg = 'Enriched msg with 1 resource record(s).'
     expected_rrecords = records_data
     assert (expected_history_msg ==
             deletions_gevent_msg.history_log[0]['message'])
