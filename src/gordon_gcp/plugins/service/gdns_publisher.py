@@ -247,14 +247,14 @@ class GDNSPublisher:
         """
         record_name = changes['additions'][0]['name']
         record_type = changes['additions'][0]['type']
-
-        response = await self.http_client.get_all(resource_records_url)
-        for resp in response:
-            for rec in resp['rrsets']:
-                if rec['name'] == record_name and rec['type'] == record_type:
-                    changes['deletions'] = [rec]
-                    break
-
+        search_params = {
+            'name': record_name,
+            'type': record_type
+        }
+        response = await self.http_client.get_json(
+            resource_records_url, params=search_params)
+        if response['rrsets']:
+            changes['deletions'] = response['rrsets']
         return changes
 
     async def _changes_published(self, change_id, base_changes_url):
