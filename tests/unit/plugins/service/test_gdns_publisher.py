@@ -91,6 +91,12 @@ def event_msg_data_with_invalid_zone(event_msg_data):
 
 
 @pytest.fixture
+def event_msg_data_with_no_resource_records(event_msg_data):
+    event_msg_data['resourceRecords'] = []
+    return event_msg_data
+
+
+@pytest.fixture
 def initial_changes_req():
     return {
         'kind': 'dns#change',
@@ -415,6 +421,19 @@ conflict_types = [
     (all_existing_zone_records(), handled_conflict_changes_req()),
     (all_existing_zone_records_empty(), initial_changes_req())
 ]
+
+
+@pytest.mark.asyncio
+async def test_handle_message_no_resource_records(
+        gdns_publisher_instance, event_message,
+        event_msg_data_with_no_resource_records, caplog):
+    """Ensure message with no resource records is logged"""
+    event_message.data = event_msg_data_with_no_resource_records
+
+    await gdns_publisher_instance.handle_message(event_message)
+    assert "Publisher received new message." in caplog.text
+    assert ('No records published or deleted as no resource records were'
+            ' present' in caplog.text)
 
 
 @pytest.mark.parametrize('existing,output', conflict_types)

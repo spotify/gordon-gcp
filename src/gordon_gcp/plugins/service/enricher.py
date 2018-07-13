@@ -266,6 +266,7 @@ class GCEEnricher:
             instance_resource_url = event_message.data['resourceName']
             records = await self._get_matching_records_for_deletion(
                 instance_resource_url)
+
         msg_logger.debug(f'Enriched with resource record(s): {records}')
         event_message.data['resourceRecords'].extend(records)
         msg = (f"Enriched msg with {len(event_message.data['resourceRecords'])}"

@@ -340,13 +340,20 @@ class GDNSPublisher:
             self._logger, {'msg_id': event_msg.msg_id})
         msg_logger.info('Publisher received new message.')
 
-        for resource_record in event_msg.data['resourceRecords']:
-            record_name = resource_record['name']
-            if not record_name.endswith('.' + self.config['dns_zone']):
-                msg = f'Error when asserting zone for record: {record_name}.'
-                msg_logger.error(msg)
-                raise exceptions.InvalidDNSZoneInMessageError(msg)
+        if event_msg.data['resourceRecords']:
+            for resource_record in event_msg.data['resourceRecords']:
+                record_name = resource_record['name']
+                if not record_name.endswith('.' + self.config['dns_zone']):
+                    msg = ('Error when asserting zone for record: '
+                           f'{record_name}.')
+                    msg_logger.error(msg)
+                    raise exceptions.InvalidDNSZoneInMessageError(msg)
 
-            await self._dispatch_changes(
-                resource_record, self.config['managed_zone'],
-                event_msg.data['action'], msg_logger)
+                await self._dispatch_changes(
+                    resource_record, self.config['managed_zone'],
+                    event_msg.data['action'], msg_logger)
+        else:
+            msg = ('No records published or deleted as no resource records were'
+                   ' present.')
+            msg_logger.info(msg)
+            event_msg.append_to_history(msg, self.phase)
