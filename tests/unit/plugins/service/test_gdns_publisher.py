@@ -195,42 +195,25 @@ def handled_conflict_changes_done():
 
 
 @pytest.fixture
-def all_existing_zone_records():
-    return [{
+def matching_zone_records():
+    return {
         'kind': 'dns#resourceRecordSetsListResponse',
-        'rrsets': [
-            {
-                'kind': 'dns#resourceRecordSet',
-                'name': 'example.com.',
-                'type': 'SOA',
-                'ttl': 21600,
-                'rrdatas': [
-                    'ns-cloud-c1.googledomains.com.'
-                    ' cloud-dns-hostmaster.google.com. '
-                    '1 21600 3600 259200 300'
-                ]
-            },
-        ]},
-        {
-        'kind': 'dns#resourceRecordSetsListResponse',
-        'rrsets': [
-            {
-                'kind': 'dns#resourceRecordSet',
-                'name': 'service.example.com.',
-                'type': 'A',
-                'ttl': 3600,
-                'rrdatas': ['127.0.0.1']
-            }
-        ]},
-    ]
+        'rrsets': [{
+            'kind': 'dns#resourceRecordSet',
+            'name': 'service.example.com.',
+            'type': 'A',
+            'ttl': 3600,
+            'rrdatas': ['127.0.0.1']
+        }]
+    }
 
 
 @pytest.fixture
-def all_existing_zone_records_empty():
-    return [{
+def matching_zone_records_empty():
+    return {
         'kind': 'dns#resourceRecordSetsListResponse',
         'rrsets': []
-    }]
+    }
 
 
 @pytest.fixture
@@ -251,14 +234,10 @@ def event_message(mocker, event_msg_data, pubsub_message):
 
 @pytest.fixture
 def mock_http_client(mocker, create_mock_coro):
-    get_all_mock, get_all_coro = create_mock_coro()
     get_json_mock, get_json_coro = create_mock_coro()
     request_post_mock, post_request_coro = create_mock_coro()
 
     http_client = mocker.MagicMock()
-
-    mocker.patch.object(http_client, 'get_all', get_all_coro)
-    mocker.patch.object(http_client, '_get_all_mock', get_all_mock)
 
     mocker.patch.object(http_client, 'get_json', get_json_coro)
     mocker.patch.object(http_client, '_get_json_mock', get_json_mock)
@@ -323,27 +302,30 @@ async def test_handle_message_raises_exception_on_invalid_zone(
 @pytest.mark.asyncio
 async def test_handle_message_handles_update_conflict(
         gdns_publisher_instance, event_message,
-        all_existing_zone_records, rrsets_url, changes_url,
+        matching_zone_records, rrsets_url, changes_url,
         initial_changes_req, handled_conflict_changes_req,
-        initial_changes_pending_json_resp, initial_changes_resp, caplog):
+        initial_changes_pending_json_resp, initial_changes_resp, caplog,
+        mocker):
     """Ensure changes with update conflicts are successfully published"""
     expected_change_id = json.loads(initial_changes_pending_json_resp)['id']
     event_message.data['resourceRecords'] = initial_changes_req['additions']
+
     gdns_publisher_instance.http_client._request_post_mock.side_effect = [
         exceptions.GCPHTTPError('409'), initial_changes_pending_json_resp]
-    gdns_publisher_instance.http_client._get_all_mock.return_value = (
-        all_existing_zone_records)
-    gdns_publisher_instance.http_client._get_json_mock.return_value = (
-        initial_changes_resp)
+    gdns_publisher_instance.http_client._get_json_mock.side_effect = [
+        matching_zone_records, initial_changes_resp]
 
     await gdns_publisher_instance.handle_message(event_message)
 
-    gdns_publisher_instance.http_client._get_all_mock.assert_called_with(
-        rrsets_url)
+    expected_get_json_calls = [
+        mocker.call(rrsets_url),
+        mocker.call(f'{changes_url}/{expected_change_id}')
+    ]
+
+    gdns_publisher_instance.http_client._get_json_mock.has_calls(
+        expected_get_json_calls)
     gdns_publisher_instance.http_client._request_post_mock.assert_called_with(
         'post', changes_url, json=handled_conflict_changes_req)
-    gdns_publisher_instance.http_client._get_json_mock.assert_called_with(
-        f'{changes_url}/{expected_change_id}')
     assert 3 == len(caplog.records)
 
 
@@ -412,8 +394,8 @@ async def test__handle_message_returns_change_id(
 
 
 conflict_types = [
-    (all_existing_zone_records(), handled_conflict_changes_req()),
-    (all_existing_zone_records_empty(), initial_changes_req())
+    (matching_zone_records(), handled_conflict_changes_req()),
+    (matching_zone_records_empty(), initial_changes_req())
 ]
 
 
@@ -423,7 +405,7 @@ async def test__handle_additions_conflict(
         gdns_publisher_instance, existing, initial_changes_req, rrsets_url,
         output):
     """Test correctly handling an additions conflict."""
-    gdns_publisher_instance.http_client._get_all_mock.return_value = existing
+    gdns_publisher_instance.http_client._get_json_mock.return_value = existing
 
     changes = await gdns_publisher_instance._handle_additions_conflict(
         initial_changes_req, rrsets_url)
