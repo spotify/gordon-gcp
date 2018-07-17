@@ -53,6 +53,7 @@ import asyncio
 import json
 import logging
 import urllib.parse
+import uuid
 
 import aiohttp
 from google import auth as gauth
@@ -173,11 +174,12 @@ class GAuthClient:
             :exc:`.GCPHTTPError`: if any exception occurred.
         """
         url, headers, body = self._setup_token_request()
-
+        request_id = uuid.uuid4()
         logging.debug(_utils.REQ_LOG_FMT.format(
-            method='POST', url=url, kwargs=None))
+            request_id=request_id, method='POST', url=url, kwargs=None))
         async with self._session.post(url, headers=headers, data=body) as resp:
             log_kw = {
+                'request_id': request_id,
                 'method': 'POST',
                 'url': resp.url,
                 'status': resp.status,
@@ -189,7 +191,7 @@ class GAuthClient:
             try:
                 resp.raise_for_status()
             except aiohttp.ClientResponseError as e:
-                msg = f'Issue connecting to {resp.url}: {e}'
+                msg = f'[{request_id}] Issue connecting to {resp.url}: {e}'
                 logging.error(msg, exc_info=e)
                 raise exceptions.GCPHTTPError(msg)
 
@@ -197,7 +199,7 @@ class GAuthClient:
             try:
                 self.token = response['access_token']
             except KeyError:
-                msg = 'No access token in response.'
+                msg = '[{request_id}] No access token in response.'
                 logging.error(msg)
                 raise exceptions.GCPAuthError(msg)
 
