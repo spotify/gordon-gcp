@@ -80,6 +80,22 @@ class GCEEnricherBuilder:
             self.config['retries'] = 5
         return []
 
+    def _validate_managed_zone(self):
+        msg = []
+        if not self.config.get('managed_zone'):
+            msg.append('The name of the Google Cloud DNS managed zone is '
+                       'required to correctly delete A records for deleted '
+                       'instances.')
+        return msg
+
+    def _validate_project(self):
+        msg = []
+        if not self.config.get('project'):
+            msg.append('The GCP project that contains the Google Cloud DNS '
+                       'managed zone is required to correctly delete A records '
+                       'for deleted instances.')
+        return msg
+
     def _call_validators(self):
         """Actually run all the validations.
 
@@ -90,6 +106,8 @@ class GCEEnricherBuilder:
         msg.extend(self._validate_keyfile())
         msg.extend(self._validate_dns_zone())
         msg.extend(self._validate_retries())
+        msg.extend(self._validate_project())
+        msg.extend(self._validate_managed_zone())
         return msg
 
     def _validate_config(self):
@@ -126,6 +144,8 @@ class GCEEnricher:
             the GCE API.
     """
     phase = 'enrich'
+    RESOURCE_RECORDS_ENDPOINT = ('https://www.googleapis.com/dns/v1/projects/'
+                                 '{project}/managedZones/{managedZone}/rrsets')
 
     def __init__(self, config, metrics, http_client, **kwargs):
         self.config = config
@@ -195,6 +215,25 @@ class GCEEnricher:
                 fqdn, external_ip, default_ttl, msg_logger)
         ]
 
+    # The types of records that this returns for deletion should match the
+    # types of records that are created above in the _create_rrecords method
+    async def _get_matching_records_for_deletion(self, instance_resource_url):
+        # Get the fqdn of the instance
+        instance_name = instance_resource_url.split('/')[-1]
+        fqdn = self._get_fqdn(instance_name)
+
+        # Get the Google DNS A records for managed zone with name matching the
+        # instance fqdn
+        project = self.config['project']
+        managed_zone = self.config['managed_zone']
+        resource_records_url = GCEEnricher.RESOURCE_RECORDS_ENDPOINT.format(
+            project=project, managedZone=managed_zone)
+
+        search_params = {'name': fqdn, 'type': 'A'}
+        response = await self._http_client.get_json(
+            resource_records_url, params=search_params)
+        return response['rrsets']
+
     async def handle_message(self, event_message):
         """
         Enrich message with extra context and send it to the publisher.
@@ -208,7 +247,6 @@ class GCEEnricher:
             event_message (.GEventMessage): message requiring
                 additional information.
         """
-
         # if the message has resource records, assume it has all info
         # it needs to be published, and therefore is already enriched
         if event_message.data['resourceRecords']:
@@ -219,14 +257,18 @@ class GCEEnricher:
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': event_message.msg_id})
 
-        instance_data = await self._poll_for_instance_data(
-            event_message.data['resourceName'], msg_logger)
-        records = await self._create_rrecords(
-            event_message.data, instance_data, msg_logger)
+        if event_message.data['action'] == 'additions':
+            instance_data = await self._poll_for_instance_data(
+                event_message.data['resourceName'], msg_logger)
+            records = await self._create_rrecords(
+                event_message.data, instance_data, msg_logger)
+        elif event_message.data['action'] == 'deletions':
+            instance_resource_url = event_message.data['resourceName']
+            records = await self._get_matching_records_for_deletion(
+                instance_resource_url)
 
         msg_logger.debug(f'Enriched with resource record(s): {records}')
         event_message.data['resourceRecords'].extend(records)
-
-        added_records = event_message.data['resourceRecords']
-        msg = f'Enriched msg with {len(added_records)} resource record(s).'
+        msg = (f"Enriched msg with {len(event_message.data['resourceRecords'])}"
+               " resource record(s).")
         event_message.append_to_history(msg, self.phase)

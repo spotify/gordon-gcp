@@ -41,6 +41,7 @@ import datetime
 import http.client
 import json
 import logging
+import uuid
 
 import aiohttp
 
@@ -132,36 +133,44 @@ class AIOConnection:
             {'Authorization': f'Bearer {self._auth_client.token}'}
         )
 
-        logging.debug(
-            _utils.REQ_LOG_FMT.format(method=method.upper(), url=url))
+        request_id = kwargs.get('request_id', uuid.uuid4())
+        logging.debug(_utils.REQ_LOG_FMT.format(
+            request_id=request_id,
+            method=method.upper(),
+            url=url,
+            kwargs=req_kwargs))
         async with self._session.request(
                 method, url, **req_kwargs) as resp:
             log_kw = {
+                'request_id': request_id,
                 'method': method.upper(),
-                'url': url,
+                'url': resp.url,
                 'status': resp.status,
                 'reason': resp.reason
             }
             logging.debug(_utils.RESP_LOG_FMT.format(**log_kw))
 
             if resp.status in REFRESH_STATUS_CODES:
-                logging.warning(f'HTTP Status Code {resp.status} returned '
-                                f'requesting {url}: {resp.reason}')
+                logging.warning(f'[{request_id}] HTTP Status Code {resp.status}'
+                                f' returned requesting {resp.url}: '
+                                f'{resp.reason}')
                 if token_refresh_attempts:
-                    logging.info(f'Attempting request to {url} again.')
+                    logging.info(f'[{request_id}] Attempting request to '
+                                 f'{resp.url} again.')
                     return await self.request(
                         method, url,
                         token_refresh_attempts=token_refresh_attempts,
+                        request_id=request_id,
                         **req_kwargs)
 
-                logging.warning('Max attempts refreshing auth token '
-                                f'exhausted while requesting {url}')
+                logging.warning(f'[{request_id}] Max attempts refreshing auth '
+                                f'token exhausted while requesting {resp.url}')
 
             # avoid leaky abstractions and wrap http errors with our own
             try:
                 resp.raise_for_status()
             except aiohttp.ClientResponseError as e:
-                msg = f'Issue connecting to {resp.url.host}: {e}'
+                msg = f'[{request_id}] Issue connecting to {resp.url}: {e}'
                 logging.error(msg, exc_info=e)
                 raise exceptions.GCPHTTPError(msg)
 
