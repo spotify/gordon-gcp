@@ -27,7 +27,7 @@ DEFAULT_REQUEST_HEADERS = {
 
 # aiohttp does not log client request/responses; mimicking
 # `requests` log format
-REQ_LOG_FMT = 'Request: "{method} {url}"'
+REQ_LOG_FMT = 'Request: "{method} {url} {kwargs}"'
 RESP_LOG_FMT = 'Response: "{method} {url}" {status} {reason}'
 
 

@@ -132,13 +132,13 @@ class AIOConnection:
             {'Authorization': f'Bearer {self._auth_client.token}'}
         )
 
-        logging.debug(
-            _utils.REQ_LOG_FMT.format(method=method.upper(), url=url))
+        logging.debug(_utils.REQ_LOG_FMT.format(
+            method=method.upper(), url=url, kwargs=req_kwargs))
         async with self._session.request(
                 method, url, **req_kwargs) as resp:
             log_kw = {
                 'method': method.upper(),
-                'url': url,
+                'url': resp.url,
                 'status': resp.status,
                 'reason': resp.reason
             }
@@ -146,22 +146,22 @@ class AIOConnection:
 
             if resp.status in REFRESH_STATUS_CODES:
                 logging.warning(f'HTTP Status Code {resp.status} returned '
-                                f'requesting {url}: {resp.reason}')
+                                f'requesting {resp.url}: {resp.reason}')
                 if token_refresh_attempts:
-                    logging.info(f'Attempting request to {url} again.')
+                    logging.info(f'Attempting request to {resp.url} again.')
                     return await self.request(
                         method, url,
                         token_refresh_attempts=token_refresh_attempts,
                         **req_kwargs)
 
                 logging.warning('Max attempts refreshing auth token '
-                                f'exhausted while requesting {url}')
+                                f'exhausted while requesting {resp.url}')
 
             # avoid leaky abstractions and wrap http errors with our own
             try:
                 resp.raise_for_status()
             except aiohttp.ClientResponseError as e:
-                msg = f'Issue connecting to {resp.url.host}: {e}'
+                msg = f'Issue connecting to {resp.url}: {e}'
                 logging.error(msg, exc_info=e)
                 raise exceptions.GCPHTTPError(msg)
 

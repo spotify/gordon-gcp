@@ -179,7 +179,7 @@ async def test_request_max_request_attempts_reached(
         with pytest.raises(exceptions.GCPHTTPError) as e:
             await client.request('get', conftest.API_URL)
 
-        e.match('Issue connecting to example.com:')
+        e.match('Issue connecting to https://example.com/v1/foo_endpoint:')
 
     assert 2 == mock_refresh_token_called
     assert 9 == len(caplog.records)

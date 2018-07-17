@@ -174,11 +174,12 @@ class GAuthClient:
         """
         url, headers, body = self._setup_token_request()
 
-        logging.debug(_utils.REQ_LOG_FMT.format(method='POST', url=url))
+        logging.debug(_utils.REQ_LOG_FMT.format(
+            method='POST', url=url, kwargs=None))
         async with self._session.post(url, headers=headers, data=body) as resp:
             log_kw = {
                 'method': 'POST',
-                'url': url,
+                'url': resp.url,
                 'status': resp.status,
                 'reason': resp.reason,
             }
@@ -188,7 +189,7 @@ class GAuthClient:
             try:
                 resp.raise_for_status()
             except aiohttp.ClientResponseError as e:
-                msg = f'Issue connecting to {resp.url.host}: {e}'
+                msg = f'Issue connecting to {resp.url}: {e}'
                 logging.error(msg, exc_info=e)
                 raise exceptions.GCPHTTPError(msg)
 
