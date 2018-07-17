@@ -1,6 +1,18 @@
 Changelog
 =========
 
+0.0.1.dev15 (2018-07-17)
+------------------------
+
+Changed
+~~~~~~~
+* Increase level of detail in HTTP request/response logging.
+
+Fixed
+~~~~~
+* Properly support 'deletions' action.
+
+
 0.0.1.dev14 (2018-07-10)
 ------------------------
 
