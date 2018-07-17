@@ -39,11 +39,11 @@ NEW_EV_PATCH = f'{MOD_PATCH}.asyncio.new_event_loop'
 # GEventMessage tests
 #####
 @pytest.fixture(scope='session')
-def raw_msg_data(audit_log_data):
+def raw_msg_data(creation_audit_log_data):
     return {
         'protoPayload': {
             'methodName': 'v1.compute.instances.insert',
-            'resourceName': audit_log_data['resourceName'],
+            'resourceName': creation_audit_log_data['resourceName'],
         },
         'timestamp': '2017-12-04T20:13:51.414016721Z',
     }
@@ -295,11 +295,11 @@ def mock_create_gevent_msg(consumer, mocker, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
-                                 audit_log_data, caplog, pubsub_msg,
+                                 creation_audit_log_data, caplog, pubsub_msg,
                                  mock_get_and_validate, mock_create_gevent_msg):
     """Validate pubsub msg, create GEventMessage, and add to success chnl."""
     event_msg = event_consumer.GEventMessage(
-        pubsub_msg, audit_log_data, phase='consume')
+        pubsub_msg, creation_audit_log_data, phase='consume')
     mock_create_gevent_msg.return_value = event_msg
 
     mock_run_coro_threadsafe = mocker.Mock()
@@ -309,10 +309,10 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
 
     await consumer._handle_pubsub_msg(pubsub_msg)
 
-    audit_log_data.update({'resourceRecords': []})
+    creation_audit_log_data.update({'resourceRecords': []})
     mock_get_and_validate.assert_called_once_with(raw_msg_data)
     mock_create_gevent_msg.assert_called_once_with(
-        pubsub_msg, audit_log_data, 'audit-log')
+        pubsub_msg, creation_audit_log_data, 'audit-log')
 
     assert 4 == len(caplog.records)
     assert 'consume' == event_msg.phase
