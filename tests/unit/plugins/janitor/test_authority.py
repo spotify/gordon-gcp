@@ -142,8 +142,8 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
 
 
 @pytest.mark.asyncio
-async def test_run_when_error_raised(
-        caplog, authority_config, get_gce_client, create_mock_coro,
+async def test_run_continues_when_404_error_raised(
+        mocker, caplog, authority_config, get_gce_client, create_mock_coro,
         instance_data):
     caplog.set_level(logging.WARN)
 
@@ -155,18 +155,53 @@ async def test_run_when_error_raised(
 
     list_instances_mock, list_instances_coro = create_mock_coro()
     list_instances_mock.side_effect = [
-        exceptions.GCPHTTPError('Error!'), instances]
+        exceptions.GCPHTTPResponseError('Error!', 404), instances]
     gce_client = get_gce_client(gce.GCEClient)
     gce_client.list_instances = list_instances_coro
 
-    rrset_channel = asyncio.Queue()
+    mock_rrset_channel = mocker.Mock()
+    rrset_channel_put_mock, rrset_channel_put_coro = create_mock_coro()
+    mock_rrset_channel.put = rrset_channel_put_coro
     gce_authority = authority.GCEAuthority(authority_config, crm_client,
-                                           gce_client, rrset_channel)
+                                           gce_client, mock_rrset_channel)
 
     await gce_authority.run()
 
     # warning log project was skipped
     assert 1 == len(caplog.records)
+    assert 2 == rrset_channel_put_mock.call_count
+
+
+@pytest.mark.parametrize('exception_args,exception', [
+    (('Server is too busy to respond', 502), exceptions.GCPHTTPResponseError),
+    (('An unhandled error!',), Exception)
+])
+@pytest.mark.asyncio
+async def test_run_fails_when_unexpected_error_raised(
+        mocker, authority_config, get_gce_client, create_mock_coro,
+        instance_data, exception_args, exception):
+    instances = [instance_data]
+    active_projects_mock, active_projects_coro = create_mock_coro()
+    active_projects_mock.return_value = [{'projectId': 1}, {'projectId': 2}]
+    crm_client = get_gce_client(gcrm.GCRMClient)
+    crm_client.list_all_active_projects = active_projects_coro
+
+    list_instances_mock, list_instances_coro = create_mock_coro()
+    list_instances_mock.side_effect = [
+        exception(*exception_args), instances]
+    gce_client = get_gce_client(gce.GCEClient)
+    gce_client.list_instances = list_instances_coro
+
+    mock_rrset_channel = mocker.Mock()
+    rrset_channel_put_mock, rrset_channel_put_coro = create_mock_coro()
+    mock_rrset_channel.put = rrset_channel_put_coro
+    gce_authority = authority.GCEAuthority(authority_config, crm_client,
+                                           gce_client, mock_rrset_channel)
+
+    with pytest.raises(exception):
+        await gce_authority.run()
+
+    rrset_channel_put_mock.assert_not_called()
 
 
 def test_create_msgs_bad_json(caplog, fake_authority):
