@@ -183,9 +183,10 @@ class GCEAuthority:
             try:
                 rrsets.append(self._create_instance_rrset(instance))
             except (KeyError, IndexError) as e:
+                instance_name = instance.get('name')
                 logging.warn(
                     'Could not extract instance information for '
-                    f'{instance} because of missing key {e}, skipping.')
+                    f'{instance_name} because of missing key {e}, skipping.')
         if rrsets:
             msgs.append({
                 'zone': self.config['dns_zone'],
