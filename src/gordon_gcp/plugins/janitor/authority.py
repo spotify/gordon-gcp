@@ -141,13 +141,12 @@ class GCEAuthority:
         # project - blacklist.
         return sorted(projects - project_blacklist)
 
-    def _filter_results(self, projects, results):
+    def _filter_results(self, results):
         successful_results = []
         for index, result in enumerate(results):
             if isinstance(result, exceptions.GCPHTTPError):
-                project = projects[index]
-                msg = (f'Could not fetch instance list for project {project}: '
-                       f'{result}. Skipping this project.')
+                msg = (f'Could not fetch instance list for project, skipping: '
+                       f'{result}')
                 logging.warn(msg)
             else:
                 successful_results.extend(result)
@@ -165,7 +164,7 @@ class GCEAuthority:
 
         all_results = await asyncio.gather(*coros, return_exceptions=True)
 
-        return self._filter_results(projects, all_results)
+        return self._filter_results(all_results)
 
     def _create_instance_rrset(self, instance):
         ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
