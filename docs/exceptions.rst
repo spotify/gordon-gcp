@@ -17,10 +17,6 @@ Any exception that this module could throw.
 
 .. autoclass:: gordon_gcp.GCPHTTPResponseError
 
-.. autoclass:: gordon_gcp.GCPHTTPConflictError
-
-.. autoclass:: gordon_gcp.GCPHTTPNotFoundError
-
 .. autoclass:: gordon_gcp.GCPAuthError
 
 .. autoclass:: gordon_gcp.GCPConfigError

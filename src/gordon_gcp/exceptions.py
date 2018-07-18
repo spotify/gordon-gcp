@@ -19,9 +19,8 @@ from gordon import exceptions as core_exceptions
 
 __all__ = (
     'GCPGordonError', 'GCPGordonJanitorError', 'InvalidMessageError',
-    'InvalidDNSZoneInMessageError', 'GCPHTTPError', 'GCPHTTPConflictError',
-    'GCPHTTPNotFoundError', 'GCPAuthError', 'GCPConfigError',
-    'GCPPublishRecordTimeoutError', 'GCPHTTPResponseError'
+    'InvalidDNSZoneInMessageError', 'GCPHTTPError', 'GCPHTTPResponseError',
+    'GCPAuthError', 'GCPConfigError', 'GCPPublishRecordTimeoutError'
 )
 
 
@@ -50,14 +49,6 @@ class GCPHTTPResponseError(GCPHTTPError):
     def __init__(self, message, status):
         super().__init__(message)
         self.status = status
-
-
-class GCPHTTPConflictError(GCPHTTPError):
-    """An HTTP 409 was received."""
-
-
-class GCPHTTPNotFoundError(GCPHTTPError):
-    """An HTTP 404 was received."""
 
 
 class GCPAuthError(GCPGordonError):

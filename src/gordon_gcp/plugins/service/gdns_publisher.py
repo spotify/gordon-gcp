@@ -31,7 +31,6 @@ import datetime
 import json
 import logging
 import numbers
-import re
 
 import zope.interface
 from gordon import interfaces
@@ -205,26 +204,9 @@ class GDNSPublisher:
 
         Returns:
             change_id (str): Change ID of the Changes resource.
-
-        Raises:
-            GCPHTTPConflictError on HTTP 409.
-            GCPHTTPNotFoundError on HTTP 404.
         """
-        try:
-            resp = await self.http_client.request(
-                'post', base_changes_url, json=changes)
-        except exceptions.GCPHTTPError as e:
-            error_msg = e.args[0]
-            # Extract status code from error message.
-            match = re.search('\d+', error_msg)
-            if match:
-                status_code = int(match.group(0))
-                if status_code == 409:
-                    raise exceptions.GCPHTTPConflictError(e)
-                elif status_code == 404:
-                    raise exceptions.GCPHTTPNotFoundError(e)
-            raise e
-
+        resp = await self.http_client.request(
+            'post', base_changes_url, json=changes)
         resp_dict = json.loads(resp)
 
         # TODO: create another task to measure propagation time
@@ -305,9 +287,13 @@ class GDNSPublisher:
         changes_to_publish = self._format_resource_record_changes(
             action, resource_record)
         try:
-            change_id = await self._publish_changes(changes_to_publish,
-                                                    base_changes_url)
-        except exceptions.GCPHTTPConflictError as e:
+            change_id = await self._publish_changes(
+                changes_to_publish, base_changes_url)
+
+        except exceptions.GCPHTTPResponseError as e:
+            if e.status != 409:
+                raise e
+
             msg = ('Conflict found when publishing records. Handling and '
                    'retrying.')
             logger.info(msg)
