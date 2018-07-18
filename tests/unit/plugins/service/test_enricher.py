@@ -151,7 +151,8 @@ async def test_handle_message_event_msg_additions(
 
 
 @pytest.mark.parametrize('response,sleep_calls,logs_logged,err_msg', [
-    (exceptions.GCPHTTPError('404 error'), 0, 1, 'GCPHTTPError: 404 error'),
+    (exceptions.GCPHTTPResponseError('404 error', 404), 0, 1,
+        'GCPHTTPResponseError: 404 error'),
     ([{}] * 5, 4, 5, 'KeyError: \'networkInterfaces\'')])
 @pytest.mark.asyncio
 async def test_handle_message_event_msg_additions_failures(

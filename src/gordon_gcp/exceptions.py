@@ -21,7 +21,7 @@ __all__ = (
     'GCPGordonError', 'GCPGordonJanitorError', 'InvalidMessageError',
     'InvalidDNSZoneInMessageError', 'GCPHTTPError', 'GCPHTTPConflictError',
     'GCPHTTPNotFoundError', 'GCPAuthError', 'GCPConfigError',
-    'GCPPublishRecordTimeoutError'
+    'GCPPublishRecordTimeoutError', 'GCPHTTPResponseError'
 )
 
 
@@ -42,7 +42,14 @@ class InvalidDNSZoneInMessageError(GCPGordonError):
 
 
 class GCPHTTPError(GCPGordonError):
-    """An HTTP error occured."""
+    """An error occurred while processing an HTTP request."""
+
+
+class GCPHTTPResponseError(GCPHTTPError):
+    """An HTTP response had an error associated with a status code."""
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
 
 
 class GCPHTTPConflictError(GCPHTTPError):

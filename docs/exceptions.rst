@@ -15,6 +15,8 @@ Any exception that this module could throw.
 
 .. autoclass:: gordon_gcp.GCPHTTPError
 
+.. autoclass:: gordon_gcp.GCPHTTPResponseError
+
 .. autoclass:: gordon_gcp.GCPHTTPConflictError
 
 .. autoclass:: gordon_gcp.GCPHTTPNotFoundError

@@ -317,7 +317,8 @@ async def test_handle_message_handles_update_conflict(
     event_message.data['resourceRecords'] = initial_changes_req['additions']
 
     gdns_publisher_instance.http_client._request_post_mock.side_effect = [
-        exceptions.GCPHTTPError('409'), initial_changes_pending_json_resp]
+        exceptions.GCPHTTPResponseError('409', 409),
+        initial_changes_pending_json_resp]
     gdns_publisher_instance.http_client._get_json_mock.side_effect = [
         matching_zone_records, initial_changes_resp]
 
