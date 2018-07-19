@@ -92,7 +92,7 @@ async def test_cleanup(side_effect, gpubsub_publisher_inst, monkeypatch,
 async def test_publish(gpubsub_publisher_inst):
     """Publish received messages."""
     datetime.datetime = conftest.MockDatetime
-    msg1 = {'message': 'one'}
+    msg1 = {'action': 'additions', 'resourceRecords': {'name': 'a.b.com.'}}
 
     await gpubsub_publisher_inst.publish(msg1)
 
@@ -104,24 +104,33 @@ async def test_publish(gpubsub_publisher_inst):
     assert 1 == len(gpubsub_publisher_inst._messages)
 
 
-@pytest.mark.parametrize('raises,exp_log_records', [
-    [False, 1],
-    [Exception('foo'), 2],
+@pytest.mark.parametrize('raises', [
+    False,
+    Exception('foo'),
 ])
 @pytest.mark.asyncio
-async def test_run(raises, exp_log_records, gpubsub_publisher_inst,
+async def test_run(raises, gpubsub_publisher_inst,
                    auth_client, mocker, monkeypatch, caplog):
     """Start consuming the changes channel queue."""
     caplog.set_level(logging.DEBUG)
 
+    expected_num_publishes = 1
     if raises:
+        expected_num_publishes = 0
         gpubsub_publisher_inst.publisher.publish.side_effect = Exception('foo')
 
-    msg1 = {'message': 'one'}
+    msg1 = {'action': 'additions', 'resourceRecords': {'name': 'a.b.com.'}}
     await gpubsub_publisher_inst.changes_channel.put(msg1)
     await gpubsub_publisher_inst.changes_channel.put(None)
 
     await gpubsub_publisher_inst.run()
 
     gpubsub_publisher_inst.publisher.publish.assert_called_once()
-    assert exp_log_records == len(caplog.records)
+    assert expected_num_publishes == len(gpubsub_publisher_inst._messages)
+
+    assert 2 == len(caplog.records)
+    assert 'Finished sending' in str(caplog.records.pop())
+    if raises:
+        assert 'Exception' in str(caplog.records.pop())
+    else:
+        assert 'Message published' in str(caplog.records.pop())

@@ -56,6 +56,7 @@ To use:
 
 import asyncio
 import datetime
+import functools
 import json
 import logging
 import os
@@ -204,6 +205,13 @@ class GPubsubPublisher:
         msg = ('Finished sending reconciliation messages to Google Pub/Sub.')
         logging.info(msg)
 
+    def _message_publish_callback(self, message, future):
+        action = message['action']
+        name = message['resourceRecords']['name']
+        msg_id = future.result()
+        logging.debug(f'Message published for {action}:{name} as {msg_id},'
+                      f'currently tracking {len(self._messages)} messages.')
+
     @threads.threadpool
     def publish(self, message):
         """Publish received change message to Google Pub/Sub.
@@ -215,6 +223,8 @@ class GPubsubPublisher:
         message['timestamp'] = datetime.datetime.utcnow().isoformat()
         bytes_message = bytes(json.dumps(message), encoding='utf-8')
         future = self.publisher.publish(self.topic, bytes_message)
+        future.add_done_callback(
+            functools.partial(self._message_publish_callback, message))
 
         # collect to make sure everything's cleaned up once done
         self._messages.add(future)
