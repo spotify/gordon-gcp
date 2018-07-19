@@ -209,6 +209,7 @@ class GPubsubPublisher:
         action = message['action']
         name = message['resourceRecords']['name']
         msg_id = future.result()
+        self._messages.remove(future)
         logging.debug(f'Message published for {action}:{name} as {msg_id},'
                       f'currently tracking {len(self._messages)} messages.')
 
@@ -223,13 +224,13 @@ class GPubsubPublisher:
         message['timestamp'] = datetime.datetime.utcnow().isoformat()
         bytes_message = bytes(json.dumps(message), encoding='utf-8')
         future = self.publisher.publish(self.topic, bytes_message)
-        future.add_done_callback(
-            functools.partial(self._message_publish_callback, message))
 
         # collect to make sure everything's cleaned up once done
         self._messages.add(future)
         # TODO (lynn): add metrics.incr/emit call here once aioshumway
         #              is released
+        future.add_done_callback(
+            functools.partial(self._message_publish_callback, message))
 
     async def run(self):
         """Start consuming from :obj:`changes_channel`.
