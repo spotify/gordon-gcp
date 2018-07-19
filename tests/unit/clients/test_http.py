@@ -176,7 +176,7 @@ async def test_request_max_request_attempts_reached(
         mocked.get(conftest.API_URL, status=401)
         mocked.get(conftest.API_URL, status=401)
         mocked.get(conftest.API_URL, status=401)
-        with pytest.raises(exceptions.GCPHTTPError) as e:
+        with pytest.raises(exceptions.GCPHTTPResponseError) as e:
             await client.request('get', conftest.API_URL)
 
         e.match('Issue connecting to https://example.com/v1/foo_endpoint:')

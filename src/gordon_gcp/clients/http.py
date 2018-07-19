@@ -104,7 +104,10 @@ class AIOConnection:
         Returns:
             (str) HTTP response body.
         Raises:
-            :exc:`.GCPHTTPError`: if any exception occurred.
+            :exc:`.GCPHTTPError`: if any exception occurred,
+                specifically a :exc:`.GCPHTTPResponseError`, if the
+                exception is associated with a response status code.
+
         """
         if all([data, json]):
             msg = ('"data" and "json" request parameters can not be used '
@@ -172,7 +175,7 @@ class AIOConnection:
             except aiohttp.ClientResponseError as e:
                 msg = f'[{request_id}] Issue connecting to {resp.url}: {e}'
                 logging.error(msg, exc_info=e)
-                raise exceptions.GCPHTTPError(msg)
+                raise exceptions.GCPHTTPResponseError(msg, resp.status)
 
             return await resp.text()
 

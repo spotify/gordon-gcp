@@ -123,6 +123,8 @@ class GCEAuthority:
             to.
     """
 
+    PROJECT_SKIP_RESP_CODES = (404, 410)  # if project deleted
+
     def __init__(self, config, crm_client, gce_client, rrset_channel=None,
                  **kwargs):
         self.config = config
@@ -144,10 +146,13 @@ class GCEAuthority:
     def _filter_results(self, results):
         successful_results = []
         for index, result in enumerate(results):
-            if isinstance(result, exceptions.GCPHTTPError):
+            if (isinstance(result, exceptions.GCPHTTPResponseError) and
+                    result.status in GCEAuthority.PROJECT_SKIP_RESP_CODES):
                 msg = (f'Could not fetch instance list for project, skipping: '
                        f'{result}')
                 logging.warn(msg)
+            elif isinstance(result, Exception):
+                raise result
             else:
                 successful_results.extend(result)
 
