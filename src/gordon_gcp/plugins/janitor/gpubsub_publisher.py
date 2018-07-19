@@ -236,6 +236,7 @@ class GPubsubPublisher:
             try:
                 await self.publish(change_message)
             except Exception as e:  # todo
-                logging.error(f'foo: {e}')
+                logging.error('Exception while trying to publish message to '
+                              f' pubsub: {e}')
 
         await self.cleanup()
