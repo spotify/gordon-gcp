@@ -207,10 +207,23 @@ def test__remove_soa_and_root_ns(fake_response_data, soa_ns_rrsets,
     assert expected == actual
 
 
+@pytest.fixture
+def extra_rrset():
+    return {
+        'name': 'foo.example.net.',
+        'type': 'A',
+        'ttl': 300,
+        'rrdatas': ['1.2.3.255'],
+        'kind': 'dns#resourceRecordSet'
+    }
+
+
+@pytest.mark.parametrize('has_desired', [True, False])
 @pytest.mark.asyncio
 async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
-                                       soa_ns_rrsets, caplog, monkeypatch):
-    """A difference is detected and a change message is published."""
+                                       soa_ns_rrsets, extra_rrset, has_desired,
+                                       caplog, monkeypatch):
+    """Differences are detected and returned."""
     rrsets = fake_response_data['rrsets'] + soa_ns_rrsets
 
     mock_get_records_for_zone_called = 0
@@ -220,6 +233,7 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
         mock_get_records_for_zone_called += 1
         rrsets = fake_response_data['rrsets']
         rrsets[0]['rrdatas'] = ['10.4.5.6']
+        rrsets.append(extra_rrset)
         return [
             gdns.GCPResourceRecordSet(**kw) for kw in rrsets
         ]
@@ -228,15 +242,26 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
         recon_client.dns_client, 'get_records_for_zone',
         mock_get_records_for_zone)
 
-    expected_missing_rrsets = [
-        gdns.GCPResourceRecordSet(**record)
-        for record in [rrsets[0], soa_ns_rrsets[2]]
-    ]
-    actual_missing_rrsets = await recon_client.validate_rrsets_by_zone(
-        'example.net.', rrsets)
+    input_rrsets = []
+    expected_missing_rrsets = []
+    expected_extra_rrsets = []
+    if has_desired:
+        input_rrsets = rrsets
+        expected_missing_rrsets = [
+            gdns.GCPResourceRecordSet(**record)
+            for record in [rrsets[0], soa_ns_rrsets[2]]
+        ]
+        expected_extra_rrsets = [
+            gdns.GCPResourceRecordSet(**record)
+            for record in [extra_rrset]
+        ]
+    actual_missing_rrsets, actual_extra_rrsets = (
+        await recon_client.validate_rrsets_by_zone(
+            'example.net.', input_rrsets))
 
     assert expected_missing_rrsets == actual_missing_rrsets
-    assert 1 == len(caplog.records)
+    assert expected_extra_rrsets == actual_extra_rrsets
+    assert 2 == len(caplog.records)
     assert 1 == mock_get_records_for_zone_called
 
 
@@ -244,9 +269,9 @@ args = 'msg,exp_log_records,exp_mock_calls,qsize'
 
 params = [
     # happy path
-    [{'zone': 'example.net.', 'rrsets': []}, 2, 1, 1],
+    [{'zone': 'example.net.', 'rrsets': []}, 4, 1, 2],
     # full happy path - ugly but can't import conftest.py from here
-    [{'zone': 'example.net.', 'rrsets': 'FAKE'}, 5, 1, 4],
+    [{'zone': 'example.net.', 'rrsets': 'FAKE'}, 7, 1, 5],
     # no rrsets key
     [{'zone': 'example.net.'}, 3, 0, 1],
     # no zone key
@@ -257,14 +282,15 @@ params = [
 @pytest.mark.asyncio
 @pytest.mark.parametrize(args, params)
 async def test_run(msg, exp_log_records, exp_mock_calls, qsize,
-                   fake_response_data, caplog, recon_client, monkeypatch):
+                   fake_response_data, extra_rrset, caplog, recon_client,
+                   monkeypatch):
     """Start reconciler & continue if certain errors are raised."""
     mock_validate_rrsets_by_zone_called = 0
 
     async def mock_validate_rrsets_by_zone(zone, rrsets):
         nonlocal mock_validate_rrsets_by_zone_called
         mock_validate_rrsets_by_zone_called += 1
-        return rrsets
+        return (rrsets, [gdns.GCPResourceRecordSet(**extra_rrset)])
 
     monkeypatch.setattr(
         recon_client, 'validate_rrsets_by_zone', mock_validate_rrsets_by_zone)
