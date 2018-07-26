@@ -255,7 +255,7 @@ async def test_refresh_token_with_app_default_cred(client_with_app_default_cred,
 args = 'status,payload,exc,err_msg'
 TOKEN_ERR = 'Issue connecting to https://example.com/token'
 params = [
-    [504, None, exceptions.GCPHTTPError, TOKEN_ERR],
+    [504, None, exceptions.GCPHTTPResponseError, TOKEN_ERR],
     [200, {}, exceptions.GCPAuthError, 'No access token in response.'],
 ]
 

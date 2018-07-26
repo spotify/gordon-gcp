@@ -123,6 +123,8 @@ class GCEAuthority:
             to.
     """
 
+    PROJECT_SKIP_RESP_CODES = (404, 410)  # if project deleted
+
     def __init__(self, config, crm_client, gce_client, rrset_channel=None,
                  **kwargs):
         self.config = config
@@ -141,14 +143,16 @@ class GCEAuthority:
         # project - blacklist.
         return sorted(projects - project_blacklist)
 
-    def _filter_results(self, projects, results):
+    def _filter_results(self, results):
         successful_results = []
         for index, result in enumerate(results):
-            if isinstance(result, exceptions.GCPHTTPError):
-                project = projects[index]
-                msg = (f'Could not fetch instance list for project {project}: '
-                       f'{result}. Skipping this project.')
+            if (isinstance(result, exceptions.GCPHTTPResponseError) and
+                    result.status in GCEAuthority.PROJECT_SKIP_RESP_CODES):
+                msg = (f'Could not fetch instance list for project, skipping: '
+                       f'{result}')
                 logging.warn(msg)
+            elif isinstance(result, Exception):
+                raise result
             else:
                 successful_results.extend(result)
 
@@ -165,7 +169,7 @@ class GCEAuthority:
 
         all_results = await asyncio.gather(*coros, return_exceptions=True)
 
-        return self._filter_results(projects, all_results)
+        return self._filter_results(all_results)
 
     def _create_instance_rrset(self, instance):
         ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
@@ -183,9 +187,10 @@ class GCEAuthority:
             try:
                 rrsets.append(self._create_instance_rrset(instance))
             except (KeyError, IndexError) as e:
+                instance_name = instance.get('name')
                 logging.warn(
                     'Could not extract instance information for '
-                    f'{instance} because of missing key {e}, skipping.')
+                    f'{instance_name} because of missing key {e}, skipping.')
         if rrsets:
             msgs.append({
                 'zone': self.config['dns_zone'],
@@ -201,14 +206,18 @@ class GCEAuthority:
         instances = await self._get_instances(projects)
 
         for rrset_msg in self._create_msgs(instances):
+            # TODO: emit an actual metric
+            zone = rrset_msg['zone']
+            rrsets = rrset_msg['rrsets']
+            msg = f'[{zone}] Found {len(rrsets)} rrsets for zone in GCE.'
+            logging.info(msg)
             await self.rrset_channel.put(rrset_msg)
-        # TODO: emit a metric of domain records created per zone and project.
 
         await self.cleanup()
 
     async def cleanup(self):
         """Clean up after a run."""
-        msg = 'Finished sending record messages to the reconciler.'
+        msg = 'Finished processing GCE data.'
         logging.info(msg)
         await self.rrset_channel.put(None)
         await self.gce_client._session.close()

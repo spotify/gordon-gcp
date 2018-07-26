@@ -171,7 +171,9 @@ class GAuthClient:
         Raises:
             :exc:`.GCPAuthError`: if no token was found in the
                 response.
-            :exc:`.GCPHTTPError`: if any exception occurred.
+            :exc:`.GCPHTTPError`: if any exception occurred,
+                specifically a :exc:`.GCPHTTPResponseError`, if the
+                exception is associated with a response status code.
         """
         url, headers, body = self._setup_token_request()
         request_id = uuid.uuid4()
@@ -193,7 +195,7 @@ class GAuthClient:
             except aiohttp.ClientResponseError as e:
                 msg = f'[{request_id}] Issue connecting to {resp.url}: {e}'
                 logging.error(msg, exc_info=e)
-                raise exceptions.GCPHTTPError(msg)
+                raise exceptions.GCPHTTPResponseError(msg, resp.status)
 
             response = await resp.json()
             try:

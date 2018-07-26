@@ -269,13 +269,18 @@ class GDNSReconciler:
     async def validate_rrsets_by_zone(self, zone, rrsets):
         """Given a zone, validate current versus desired rrsets.
 
-        If there are any missing records, a corrective message for each
-        record will be published.
+        Returns lists of missing rrsets (in desired but not in current) and
+        extra rrsets (in current but not in desired).  Extra rrsets that are the
+        result of updates in the desired list will not be returned, and root
+        SOA/NS comparisons are skipped.
 
         Args:
             zone (str): zone to query Google Cloud DNS API.
             rrsets (list): desired record sets to which to compare the
                 Cloud DNS API's response.
+
+        Returns:
+            tuple[list[rrset], list[rrset]]: The missing and extra rrset lists.
         """
         desired_rrsets = [
             gdns.GCPResourceRecordSet(**record) for record in rrsets
@@ -283,43 +288,68 @@ class GDNSReconciler:
 
         actual_rrsets = await self.dns_client.get_records_for_zone(zone)
 
-        # NOTE: only working on "additions" (which includes changes to
-        #       current records) right now.
-        # TODO: (FEATURE) add support for cleaning up records that
-        #       should have been deleted.
         missing_rrsets = [
             rs for rs in desired_rrsets if rs not in actual_rrsets
         ]
         # don't try to add root SOA/NS records
         missing_rrsets = self._remove_soa_and_root_ns(zone, missing_rrsets)
 
+        # TODO: This should eventually also emit an actual metric.
         msg = (f'[{zone}] Processed {len(actual_rrsets)} rrset messages '
                f'and found {len(missing_rrsets)} missing rrsets.')
         logging.info(msg)
-        return missing_rrsets
+
+        # Assemble the deletions, but not if there are no desired rrsets,
+        # which could mean the authority failed.  Note: if the authority
+        # doesn't emit anything for a zone at all, we won't even get this far.
+        if not desired_rrsets:
+            msg = (f'[{zone}] No desired rrsets for zone; refusing to delete '
+                   'all records.')
+            logging.info(msg)
+            extra_rrsets = []
+        else:
+            extra_rrsets_raw = [
+                rs for rs in actual_rrsets if rs not in desired_rrsets
+            ]
+            # don't try to remove root SOA/NS records
+            extra_rrsets_raw = self._remove_soa_and_root_ns(
+                zone, extra_rrsets_raw)
+            # In the case of an update, the records won't match, and we'll end
+            # up with both an addition and a deletion.  But the core publisher
+            # will handle the deletion, so we need to filter that out.
+            missing_keys = ((rs.name, rs.type) for rs in missing_rrsets)
+            extra_rrsets = []
+            for rrset in extra_rrsets_raw:
+                if (rrset.name, rrset.type) not in missing_keys:
+                    extra_rrsets.append(rrset)
+
+            # TODO: This should eventually also emit an actual metric.
+            msg = (f'[{zone}] Processed {len(actual_rrsets)} rrset messages '
+                   f'and found {len(extra_rrsets)} extra rrsets.')
+            logging.info(msg)
+
+        return (missing_rrsets, extra_rrsets)
 
     async def run(self):
-        """Start consuming from :obj:`rrset_channel`.
+        """Publish necessary DNS changes to the :obj:`changes_channel`.
 
-        Once ``None`` is received from the channel, finish processing
-        records and emit a ``None`` message to the
+        Consumes zone/rrset-list messages from :obj:`rrset_channel`, compares
+        them to the current records, and publishes the changes.  Once ``None``
+        is received from the channel, emits a final ``None`` message to the
         :obj:`changes_channel`.
         """
         while True:
             desired_rrset = await self.rrset_channel.get()
             if desired_rrset is None:
                 break
-            # TODO: emit metric of message received once aioshumway is released
             try:
                 zone, raw_rrsets = self._parse_rrset_message(desired_rrset)
-                missing_rrsets = await self.validate_rrsets_by_zone(
-                    zone, raw_rrsets)
-                # TODO (lynn): emit or incr metric of missing_rrsets by zone
-                # once aioshumway is released
-                # TODO: (FEATURE): have separate metrics for additions and
-                # deletions
+                missing_rrsets, extra_rrsets = (
+                    await self.validate_rrsets_by_zone(zone, raw_rrsets))
                 await self.publish_change_messages(
                     missing_rrsets, action='additions')
+                await self.publish_change_messages(
+                    extra_rrsets, action='deletions')
             except exceptions.GCPGordonJanitorError as e:
                 msg = f'Dropping message {desired_rrset}: {e}'
                 logging.error(msg, exc_info=e)

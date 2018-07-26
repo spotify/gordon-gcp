@@ -317,7 +317,8 @@ async def test_handle_message_handles_update_conflict(
     event_message.data['resourceRecords'] = initial_changes_req['additions']
 
     gdns_publisher_instance.http_client._request_post_mock.side_effect = [
-        exceptions.GCPHTTPError('409'), initial_changes_pending_json_resp]
+        exceptions.GCPHTTPResponseError('409', 409),
+        initial_changes_pending_json_resp]
     gdns_publisher_instance.http_client._get_json_mock.side_effect = [
         matching_zone_records, initial_changes_resp]
 
@@ -362,26 +363,25 @@ async def test_handle_message_raises_exception_on_publish_timeout(
 
 
 http_exceptions = [
-    ('404', exceptions.GCPHTTPNotFoundError),
-    ('409', exceptions.GCPHTTPConflictError),
-    ('500', exceptions.GCPHTTPError),
-    ('no_code', exceptions.GCPHTTPError)
+    (('404', 404), exceptions.GCPHTTPResponseError),
+    (('500', 500), exceptions.GCPHTTPResponseError),
+    (('no_code',), exceptions.GCPHTTPError)
 ]
 
 
-@pytest.mark.parametrize('status_code,http_exception', http_exceptions)
+@pytest.mark.parametrize('exception_args,http_exception', http_exceptions)
 @pytest.mark.asyncio
-async def test__handle_message_http_exceptions_raised(
-        gdns_publisher_instance, initial_changes_req, changes_url, status_code,
-        http_exception):
+async def test__dispatch_changes_http_exceptions_raised(
+        gdns_publisher_instance, resource_record,
+        exception_args, http_exception):
     """Exception is raised when getting HTTP error from Google API."""
 
     gdns_publisher_instance.http_client._request_post_mock.side_effect = \
-        exceptions.GCPHTTPError(status_code)
+        http_exception(*exception_args)
 
     with pytest.raises(http_exception):
-        await gdns_publisher_instance._publish_changes(initial_changes_req,
-                                                       changes_url)
+        await gdns_publisher_instance._dispatch_changes(
+            resource_record, None, None, None)
 
 
 @pytest.mark.asyncio
@@ -399,12 +399,6 @@ async def test__handle_message_returns_change_id(
     assert expected_change_id == change_id
 
 
-conflict_types = [
-    (matching_zone_records(), handled_conflict_changes_req()),
-    (matching_zone_records_empty(), initial_changes_req())
-]
-
-
 @pytest.mark.asyncio
 async def test_handle_message_no_resource_records(
         gdns_publisher_instance, event_message,
@@ -416,6 +410,12 @@ async def test_handle_message_no_resource_records(
     assert "Publisher received new message." in caplog.text
     assert ('No records published or deleted as no resource records were'
             ' present' in caplog.text)
+
+
+conflict_types = [
+    (matching_zone_records(), handled_conflict_changes_req()),
+    (matching_zone_records_empty(), initial_changes_req())
+]
 
 
 @pytest.mark.parametrize('existing,output', conflict_types)
