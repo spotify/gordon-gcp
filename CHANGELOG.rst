@@ -1,6 +1,27 @@
 Changelog
 =========
 
+0.0.1.dev16 (2018-07-26)
+------------------------
+
+Fixed
+~~~~~
+* Fix incorrect and superfluous authority logging.
+
+Added
+~~~~~
+* Add deletions to the janitor reconciler.
+
+Changed
+~~~~~~~
+* Simplify HTTP error response handling.
+* Fail authority if it cannot get a full view of of all instances.
+
+Removed
+~~~~~~~
+* Removed GCPHTTPNotFoundError and GCPHTTPConflictError.
+
+
 0.0.1.dev15 (2018-07-17)
 ------------------------
 
