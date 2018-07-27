@@ -56,6 +56,7 @@ To use:
 
 import asyncio
 import datetime
+import functools
 import json
 import logging
 import os
@@ -204,6 +205,14 @@ class GPubsubPublisher:
         msg = ('Finished sending reconciliation messages to Google Pub/Sub.')
         logging.info(msg)
 
+    def _message_publish_callback(self, message, future):
+        action = message['action']
+        name = message['resourceRecords']['name']
+        msg_id = future.result()
+        self._messages.remove(future)
+        logging.debug(f'Message published for {action}:{name} as {msg_id},'
+                      f'currently tracking {len(self._messages)} messages.')
+
     @threads.threadpool
     def publish(self, message):
         """Publish received change message to Google Pub/Sub.
@@ -220,6 +229,8 @@ class GPubsubPublisher:
         self._messages.add(future)
         # TODO (lynn): add metrics.incr/emit call here once aioshumway
         #              is released
+        future.add_done_callback(
+            functools.partial(self._message_publish_callback, message))
 
     async def run(self):
         """Start consuming from :obj:`changes_channel`.
@@ -236,6 +247,7 @@ class GPubsubPublisher:
             try:
                 await self.publish(change_message)
             except Exception as e:  # todo
-                logging.error(f'foo: {e}')
+                logging.error('Exception while trying to publish message to '
+                              f' pubsub: {e}')
 
         await self.cleanup()

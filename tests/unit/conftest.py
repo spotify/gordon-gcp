@@ -21,6 +21,7 @@ import asyncio
 import datetime
 import json
 import logging
+from concurrent import futures
 
 import aiohttp
 import pytest
@@ -221,6 +222,9 @@ def mock_pubsub_client(mocker, monkeypatch):
     patch = (
         'gordon_gcp.plugins.janitor.gpubsub_publisher.pubsub.PublisherClient')
     monkeypatch.setattr(patch, mock)
+    future = futures.Future()
+    future.set_result('id123456790')
+    mock.publish.return_value = future
     return mock
 
 
