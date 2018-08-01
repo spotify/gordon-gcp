@@ -88,7 +88,7 @@ class GCEClient(http.AIOConnection, _utils.GPaginatorMixin):
 
     async def list_instances(self,
                              project,
-                             page_size=500,
+                             page_size=100,
                              instance_filter=None):
         """Fetch all instances in a GCE project.
 
