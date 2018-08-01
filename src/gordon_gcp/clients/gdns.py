@@ -110,6 +110,13 @@ class GDNSClient(http.AIOConnection):
             rrset = GCPResourceRecordSet(**record)
             records.append(rrset)
 
+    def _convert_dns_zone_to_managed_zone(self, zone):
+        if zone.endswith('.in-addr.arpa.'):
+            return 'reverse-' + '-'.join(zone.split('.')[0:2])
+
+        zone = zone.replace('.', '-')
+        return zone[:-1]
+
     async def get_records_for_zone(self, zone):
         """Get all resource record sets for a particular managed zone.
 
@@ -118,6 +125,7 @@ class GDNSClient(http.AIOConnection):
         Returns:
             list of :class:`GCPResourceRecordSet` instances.
         """
+        zone = self._convert_dns_zone_to_managed_zone(zone)
         url = f'{self._base_url}/managedZones/{zone}/rrsets'
 
         # to limit the amount of data across the wire; also makes it
