@@ -1,6 +1,18 @@
 Changelog
 =========
 
+0.0.1.dev18 (2018-08-01)
+------------------------
+
+Added
+~~~~~
+* Add HTTP 403 response code to janitor PROJECT_SKIP_RESP_CODES constant.
+
+Changed
+~~~~~~~
+* Default max results to 100 when listing instances in GCE client.
+
+
 0.0.1.dev17 (2018-07-27)
 ------------------------
 
