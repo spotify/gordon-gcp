@@ -123,7 +123,7 @@ class GCEAuthority:
             to.
     """
 
-    PROJECT_SKIP_RESP_CODES = (404, 410)  # if project deleted
+    PROJECT_SKIP_RESP_CODES = {403, 404, 410}
 
     def __init__(self, config, crm_client, gce_client, rrset_channel=None,
                  **kwargs):
