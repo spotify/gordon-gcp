@@ -123,7 +123,7 @@ class GDNSClient(http.AIOConnection):
         # to limit the amount of data across the wire; also makes it
         # easier to create GCPResourceRecordSet instances
         fields = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
-                  'rrsets/type,rrsets/ttl,nextPageToken')
+                  'rrsets/type,rrsets/ttl')
         params = {
             'fields': fields,
         }
