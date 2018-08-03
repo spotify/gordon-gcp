@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import logging
 
 import aiohttp
@@ -86,27 +87,50 @@ def test_get_rrsets_as_objects(rrset_dict):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('params', [
+    None,
+    {'fields': 'some-other-field,another-field'},
+    {'name': 'example.com.', 'type': 'A'}
+])
 async def test_get_records_for_zone(fake_response_data, client, caplog,
-                                    monkeypatch):
-    mock_get_json_called = 0
+                                    params):
+    mock_get_json_called = False
+    mock_get_json_params = []
+    # get_records_for_zone() modifies its params argument in place; see
+    # https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_sharing
+    # https://jeffknupp.com/blog/2012/11/13/is-python-callbyvalue-or-callbyreference-neither/
+    original_params = copy.deepcopy(params)
 
     async def mock_get_json(*args, **kwargs):
         nonlocal mock_get_json_called
+        nonlocal mock_get_json_params
+        # without the copy, both entries in mock_get_json_params change; because
+        # of late binding, they both point to the final value inside this
+        # inner function
+        mock_get_json_params.append(copy.deepcopy(kwargs.get('params')))
         data = fake_response_data.copy()
         if not mock_get_json_called:
             data['nextPageToken'] = 1
-        mock_get_json_called += 1
+            mock_get_json_called = True
         return data
 
-    monkeypatch.setattr(client, 'get_json', mock_get_json)
+    client.get_json = mock_get_json
 
     url = f'{client._base_url}/managedZones/a-zone/rrsets'
     with aioresponses() as mocked:
         mocked.get(url, status=200)
         # paginated requests
         mocked.get(url, status=200)
-        records = await client.get_records_for_zone('a.zone.')
-
+        records = await client.get_records_for_zone('a.zone.', params=params)
+        actual_params1 = {
+            'fields': ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
+                       'rrsets/type,rrsets/ttl,nextPageToken')
+        }
+        if original_params:
+            actual_params1.update(original_params)
+        actual_params2 = copy.deepcopy(actual_params1)
+        actual_params2['pageToken'] = 1
+        assert [actual_params1, actual_params2] == mock_get_json_params
         assert 6 == len(records)
         exp = fake_response_data['rrsets'] + fake_response_data['rrsets']
         assert exp == records

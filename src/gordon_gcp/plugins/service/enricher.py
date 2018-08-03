@@ -36,6 +36,7 @@ from gordon import interfaces
 
 from gordon_gcp import exceptions
 from gordon_gcp.clients import auth
+from gordon_gcp.clients import gdns
 from gordon_gcp.clients import http
 from gordon_gcp.plugins import _utils
 
@@ -58,6 +59,7 @@ class GCEEnricherBuilder:
         self.kwargs = kwargs
         self._validate_config()
         self.http_client = self._init_http_client()
+        self.dns_client = self._init_dns_client()
 
     def _validate_keyfile(self):
         msg = []
@@ -80,14 +82,6 @@ class GCEEnricherBuilder:
             self.config['retries'] = 5
         return []
 
-    def _validate_managed_zone(self):
-        msg = []
-        if not self.config.get('managed_zone'):
-            msg.append('The name of the Google Cloud DNS managed zone is '
-                       'required to correctly delete A records for deleted '
-                       'instances.')
-        return msg
-
     def _validate_project(self):
         msg = []
         if not self.config.get('project'):
@@ -107,7 +101,6 @@ class GCEEnricherBuilder:
         msg.extend(self._validate_dns_zone())
         msg.extend(self._validate_retries())
         msg.extend(self._validate_project())
-        msg.extend(self._validate_managed_zone())
         return msg
 
     def _validate_config(self):
@@ -125,12 +118,14 @@ class GCEEnricherBuilder:
                                 scopes=scopes)
 
     def _init_http_client(self):
-        auth_client = self._init_auth()
-        return http.AIOConnection(auth_client=auth_client)
+        return http.AIOConnection(auth_client=self._init_auth())
+
+    def _init_dns_client(self):
+        return gdns.GDNSClient(self.config['project'], self._init_auth())
 
     def build_enricher(self):
-        return GCEEnricher(
-            self.config, self.metrics, self.http_client, **self.kwargs)
+        return GCEEnricher(self.config, self.metrics, self.http_client,
+                           self.dns_client, **self.kwargs)
 
 
 @zope.interface.implementer(interfaces.IMessageHandler)
@@ -144,13 +139,12 @@ class GCEEnricher:
             the GCE API.
     """
     phase = 'enrich'
-    RESOURCE_RECORDS_ENDPOINT = ('https://www.googleapis.com/dns/v1/projects/'
-                                 '{project}/managedZones/{managedZone}/rrsets')
 
-    def __init__(self, config, metrics, http_client, **kwargs):
+    def __init__(self, config, metrics, http_client, dns_client, **kwargs):
         self.config = config
         self.metrics = metrics
         self._http_client = http_client
+        self._dns_client = dns_client
         self._logger = logging.getLogger('')
 
     def _check_instance_data(self, instance_data):
@@ -222,16 +216,10 @@ class GCEEnricher:
         instance_name = instance_resource_url.split('/')[-1]
         fqdn = self._get_fqdn(instance_name)
 
-        # Get the Google DNS A records for managed zone with name matching the
-        # instance fqdn
-        project = self.config['project']
-        managed_zone = self.config['managed_zone']
-        resource_records_url = GCEEnricher.RESOURCE_RECORDS_ENDPOINT.format(
-            project=project, managedZone=managed_zone)
-
+        # Get the A records with name matching the instance FQDN
         search_params = {'name': fqdn, 'type': 'A'}
-        response = await self._http_client.get_json(
-            resource_records_url, params=search_params)
+        response = await self._dns_client.get_records_for_zone(
+            self.config['dns_zone'], params=search_params)
         return response['rrsets']
 
     async def handle_message(self, event_message):

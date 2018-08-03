@@ -87,12 +87,6 @@ All configuration options above in the general ``[gcp]`` may be used here. Addit
 
     `Required`: DNS zone to validate the correctness of A records before publishing. Must be a fully-qualified domain name (FQDN), ending in ``.``, e.g. ``example.com.``.
 
-.. option:: managed_zone="STR"
-
-    `Required`: The managed zone name in Google Cloud DNS where records are to be published.
-
-    To learn more about managed zones, please see `Google's docs on managed zones <managed_zones>`_.
-
 .. option:: default_ttl=INT
 
     `Required`: The default TTL in seconds. This will be used if the publisher receives a record set to be published that does not yet have the TTL set. Must be greater than 4.

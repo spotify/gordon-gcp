@@ -141,24 +141,26 @@ class GDNSClient(http.AIOConnection):
             return self.REVERSE_PREFIX + '-'.join(zone.split('.')[-5:-3])
         return '-'.join(zone.split('.')[:-1])
 
-    async def get_records_for_zone(self, zone):
-        """Get all resource record sets for a particular managed zone.
+    async def get_records_for_zone(self, dns_zone, params=None):
+        """Get all resource record sets for a managed zone, using the DNS zone.
 
         Args:
-            zone (str): Desired DNS zone to query.
+            dns_zone (str): Desired DNS zone to query.
+            params (dict): (optional) Additional query parameters for HTTP
+                requests to the GDNS API.
         Returns:
             list of dicts representing rrsets.
         """
-        managed_zone = self.get_managed_zone(zone)
+        managed_zone = self.get_managed_zone(dns_zone)
         url = f'{self._base_url}/managedZones/{managed_zone}/rrsets'
 
-        # to limit the amount of data across the wire; also makes it
-        # easier to create GCPResourceRecordSet instances
-        fields = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
-                  'rrsets/type,rrsets/ttl,nextPageToken')
-        params = {
-            'fields': fields,
-        }
+        if not params:
+            params = {}
+
+        if 'fields' not in params:
+            # makes it easier to create GCPResourceRecordSet instances
+            params['fields'] = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
+                                'rrsets/type,rrsets/ttl,nextPageToken')
         next_page_token = None
 
         records = []
@@ -171,5 +173,5 @@ class GDNSClient(http.AIOConnection):
             if not next_page_token:
                 break
 
-        logging.info(f'Found {len(records)} for zone "{zone}".')
+        logging.info(f'Found {len(records)} for zone "{dns_zone}".')
         return records

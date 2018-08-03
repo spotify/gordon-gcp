@@ -62,21 +62,10 @@ def config(fake_keyfile):
         'keyfile': fake_keyfile,
         'scopes': [],
         'dns_zone': 'example.com.',
-        'managed_zone': 'example-com',
         'project': 'gcp-proj-dns',
         'default_ttl': 300,
         'retries': 5
     }
-
-
-def test_implements_interface(mocker, config, metrics):
-    """GCEEnricher implements IMessageHandler"""
-    client = enricher.GCEEnricher(config, None, metrics)
-
-    assert interfaces.IMessageHandler.providedBy(client)
-    assert interfaces.IMessageHandler.implementedBy(enricher.GCEEnricher)
-    assert config is client.config
-    assert 'enrich' == client.phase
 
 
 @pytest.fixture
@@ -89,6 +78,16 @@ def mock_http_client(mocker, create_mock_coro):
 
 
 @pytest.fixture
+def mock_dns_client(mocker, create_mock_coro, records_data):
+    mock, coro = create_mock_coro()
+    mock.return_value = {'rrsets': records_data}
+    client = mocker.Mock()
+    mocker.patch.object(client, 'get_records_for_zone', coro)
+    mocker.patch.object(client, '_get_records_for_zone_mock', mock)
+    return client
+
+
+@pytest.fixture
 def mock_async_sleep(mocker, create_mock_coro):
     sleep_mock, sleep_coro = create_mock_coro()
     mocker.patch(
@@ -97,8 +96,17 @@ def mock_async_sleep(mocker, create_mock_coro):
 
 
 @pytest.fixture
-def gce_enricher(config, metrics, mock_http_client):
-    return enricher.GCEEnricher(config, metrics, mock_http_client)
+def gce_enricher(config, metrics, mock_http_client, mock_dns_client):
+    return enricher.GCEEnricher(
+        config, metrics, mock_http_client, mock_dns_client)
+
+
+def test_implements_interface(config, gce_enricher):
+    """GCEEnricher implements IMessageHandler"""
+    assert interfaces.IMessageHandler.providedBy(gce_enricher)
+    assert interfaces.IMessageHandler.implementedBy(enricher.GCEEnricher)
+    assert config is gce_enricher.config
+    assert 'enrich' == gce_enricher.phase
 
 
 @pytest.mark.asyncio

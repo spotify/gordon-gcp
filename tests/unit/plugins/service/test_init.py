@@ -196,7 +196,6 @@ def enricher_config(fake_keyfile):
     return {
         'keyfile': fake_keyfile,
         'dns_zone': 'example.com.',
-        'managed_zone': 'example-com',
         'project': 'gcp-proj-dns',
     }
 
@@ -222,9 +221,6 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
     ('keyfile', 'The path to a Service Account JSON keyfile is required to '
                 'authenticate to the GCE API.'),
     ('dns_zone', 'A dns zone is required to build correct A records.'),
-    ('managed_zone', 'The name of the Google Cloud DNS managed zone is '
-                     'required to correctly delete A records for deleted '
-                     'instances'),
     ('project', 'The GCP project that contains the Google Cloud DNS managed '
                 'zone is required to correctly delete A records for deleted '
                 'instances.')])
