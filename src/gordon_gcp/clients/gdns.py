@@ -97,6 +97,7 @@ class GDNSClient(http.AIOConnection):
             object attached to :obj:`auth_client` if not provided.
     """
     BASE_URL = 'https://www.googleapis.com/dns'
+    REVERSE_PREFIX = 'reverse-'
 
     def __init__(self, project=None, auth_client=None, api_version='v1',
                  session=None):
@@ -110,15 +111,41 @@ class GDNSClient(http.AIOConnection):
             rrset = GCPResourceRecordSet(**record)
             records.append(rrset)
 
+    def get_managed_zone(self, zone):
+        """Get the GDNS managed zone name for a DNS zone.
+
+        Google uses custom string names with specific `requirements
+        <https://cloud.google.com/dns/api/v1/managedZones#resource>`_
+        for storing records. The scheme implemented here chooses a
+        managed zone name which removes the trailing dot and replaces
+        other dots with dashes, and in the case of reverse records,
+        uses only the two most significant octets, prepended with
+        'reverse'.
+
+        Example:
+           get_managed_zone('example.com.') = 'example-com'
+           get_managed_zone('30.20.10.in-addr.arpa.) = 'reverse-20-10'
+
+        Args:
+            zone (str): DNS zone.
+        Returns:
+            str of managed zone name.
+
+        """
+        if zone.endswith('.in-addr.arpa.'):
+            return self.REVERSE_PREFIX + '-'.join(zone.split('.')[-5:-3])
+        return '-'.join(zone.split('.')[:-1])
+
     async def get_records_for_zone(self, zone):
         """Get all resource record sets for a particular managed zone.
 
         Args:
-            zone (str): Desired managed zone to query.
+            zone (str): Desired DNS zone to query.
         Returns:
             list of :class:`GCPResourceRecordSet` instances.
         """
-        url = f'{self._base_url}/managedZones/{zone}/rrsets'
+        managed_zone = self.get_managed_zone(zone)
+        url = f'{self._base_url}/managedZones/{managed_zone}/rrsets'
 
         # to limit the amount of data across the wire; also makes it
         # easier to create GCPResourceRecordSet instances

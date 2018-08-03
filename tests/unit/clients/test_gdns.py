@@ -54,20 +54,6 @@ def test_create_gcp_rrset():
         gdns.GCPResourceRecordSet(**missing_params)
 
 
-def test_dns_client_default(mocker):
-    auth_client = mocker.Mock(auth.GAuthClient)
-    creds = mocker.Mock()
-    auth_client.creds = creds
-    session = aiohttp.ClientSession()
-
-    client = gdns.GDNSClient(
-        'a-project', auth_client, session=session)
-
-    assert 'a-project' == client.project
-
-    client._session.close()
-
-
 @pytest.fixture
 def client(mocker):
     auth_client = mocker.Mock(auth.GAuthClient)
@@ -79,6 +65,10 @@ def client(mocker):
     yield client
     # test teardown
     client._session.close()
+
+
+def test_dns_client_default(client):
+    assert 'a-project' == client.project
 
 
 @pytest.mark.asyncio
@@ -101,10 +91,18 @@ async def test_get_records_for_zone(fake_response_data, client, caplog,
         mocked.get(url, status=200)
         # paginated requests
         mocked.get(url, status=200)
-        records = await client.get_records_for_zone('a-zone')
+        records = await client.get_records_for_zone('a.zone.')
 
         assert all(
             [isinstance(r, gdns.GCPResourceRecordSet) for r in records])
         assert 6 == len(records)
 
     assert 1 == len(caplog.records)
+
+
+@pytest.mark.parametrize('dns_zone,exp_managed_zone', [
+    ('example.com.', 'example-com'),
+    ('30.20.10.in-addr.arpa.', 'reverse-20-10')
+])
+def test_get_managed_zone(dns_zone, exp_managed_zone, client):
+    assert exp_managed_zone == client.get_managed_zone(dns_zone)
