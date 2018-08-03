@@ -44,7 +44,7 @@ To use:
     #                      rrdatas=['10.1.2.3'], ttl=300)
 
 """
-
+import json
 import logging
 
 import attr
@@ -97,6 +97,8 @@ class GDNSClient(http.AIOConnection):
             object attached to :obj:`auth_client` if not provided.
     """
     BASE_URL = 'https://www.googleapis.com/dns'
+    # see https://cloud.google.com/dns/api/v1/changes#resource
+    DNS_CHANGES_DONE = 'done'
     REVERSE_PREFIX = 'reverse-'
 
     def __init__(self, project=None, auth_client=None, api_version='v1',
@@ -175,3 +177,32 @@ class GDNSClient(http.AIOConnection):
 
         logging.info(f'Found {len(records)} for zone "{dns_zone}".')
         return records
+
+    async def is_change_done(self, zone, change_id):
+        """Check if a DNS change has completed.
+
+        Args:
+            zone (str): DNS zone of the change.
+            change_id (str): Identifier of the change.
+        Returns:
+            Boolean
+        """
+        zone_id = self.get_managed_zone(zone)
+        url = f'{self._base_url}/managedZones/{zone_id}/changes/{change_id}'
+        resp = await self.get_json(url)
+        return resp['status'] == self.DNS_CHANGES_DONE
+
+    async def publish_changes(self, zone, changes):
+        """Post changes to a zone.
+
+        Args:
+            zone (str): DNS zone of the change.
+            changes (dict): JSON compatible dict of a `Change
+                <https://cloud.google.com/dns/api/v1/changes>`_.
+        Returns:
+            string identifier of the change.
+        """
+        zone_id = self.get_managed_zone(zone)
+        url = f'{self._base_url}/managedZones/{zone_id}/changes'
+        resp = await self.request('post', url, json=changes)
+        return json.loads(resp)['id']

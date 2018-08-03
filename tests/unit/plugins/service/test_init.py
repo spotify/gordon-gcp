@@ -261,7 +261,6 @@ def publisher_config(fake_keyfile):
         'keyfile': fake_keyfile,
         'dns_zone': 'example.com.',
         'project': 'test-example',
-        'managed_zone': 'my-zone',
         'default_ttl': 300,
     }
 
@@ -279,7 +278,7 @@ def publisher_config(fake_keyfile):
 def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
                             publisher_config, auth_client, metrics):
     """Happy path to initialize a GDNSPublisher client."""
-    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.gdns.GDNSClient'
     mocker.patch(patch)
 
     if conf_value:
@@ -297,8 +296,6 @@ def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
                     'to authenticate for Google Cloud DNS.')),
     (('project',), 'The GCP project where Cloud DNS is located is required.'),
     (('dns_zone',), 'A dns zone is required to build correct A records.'),
-    (('managed_zone',), ('A managed zone is required to publish records to '
-                         'Google Cloud DNS.')),
     (('default_ttl',), ('A default TTL in seconds must be set for publishing '
                         'records to Google Cloud DNS.')),
     (('keyfile', 'project'), ('The path to a Service Account JSON keyfile is '
@@ -310,7 +307,7 @@ def test_get_gdns_publisher_raises(conf_keys, exp_msg_snip,
                                    publisher_config, mocker, auth_client,
                                    caplog, metrics):
     """Raise when required config key(s) missing."""
-    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.gdns.GDNSClient'
     mocker.patch(patch)
 
     for conf_key in conf_keys:
@@ -337,7 +334,7 @@ def test_get_gdns_publisher_bad_config(conf_key, bad_value, exp_msg_snip,
                                        publisher_config, mocker, auth_client,
                                        caplog, metrics):
     """Raise when config values are malformed."""
-    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.gdns.GDNSClient'
     mocker.patch(patch)
 
     publisher_config[conf_key] = bad_value

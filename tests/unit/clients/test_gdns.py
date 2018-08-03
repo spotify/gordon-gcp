@@ -65,13 +65,23 @@ def test_create_gcp_rrset_raises():
 
 
 @pytest.fixture
-def client(mocker):
+def client(mocker, create_mock_coro):
     auth_client = mocker.Mock(auth.GAuthClient)
     creds = mocker.Mock()
     auth_client.creds = creds
     session = aiohttp.ClientSession()
+
     client = gdns.GDNSClient(
         'a-project', auth_client=auth_client, session=session)
+
+    # mock out inherited methods from http.AIOConnection
+    get_json_mock, get_json_coro = create_mock_coro()
+    request_post_mock, post_request_coro = create_mock_coro()
+    client.get_json = get_json_coro
+    client._get_json_mock = get_json_mock
+
+    client.request = post_request_coro
+    client._request_post_mock = request_post_mock
     yield client
     # test teardown
     client._session.close()
@@ -144,3 +154,30 @@ async def test_get_records_for_zone(fake_response_data, client, caplog,
 ])
 def test_get_managed_zone(dns_zone, exp_managed_zone, client):
     assert exp_managed_zone == client.get_managed_zone(dns_zone)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('resp,expected', [
+    ({'status': 'pending'}, False),
+    ({'status': 'done'}, True)
+])
+async def test_is_change_done(client, resp, expected):
+    client._get_json_mock.return_value = resp
+    actual = await client.is_change_done('example.com.', 'some-id-12')
+    assert expected == actual
+
+    exp_url = f'{client._base_url}/managedZones/example-com/changes/some-id-12'
+    client._get_json_mock.assert_called_with(exp_url)
+
+
+@pytest.mark.asyncio
+async def test_publish_changes(client, rrset_dict):
+    expected = 'some-id-12345'
+    client._request_post_mock.return_value = f'{{"id": "{expected}"}}'
+
+    changes = {'kind': 'dns#change', 'additions': [rrset_dict]}
+    actual = await client.publish_changes('example.com.', changes)
+    assert expected == actual
+
+    exp_url = f'{client._base_url}/managedZones/example-com/changes'
+    client._request_post_mock.assert_called_with('post', exp_url, json=changes)
