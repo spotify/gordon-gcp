@@ -105,11 +105,16 @@ class GDNSClient(http.AIOConnection):
         self.project = project
         self._base_url = f'{self.BASE_URL}/{api_version}/projects/{project}'
 
-    def _parse_resp_to_records(self, response, records):
-        unparsed_records = response.get('rrsets', [])
-        for record in unparsed_records:
-            rrset = GCPResourceRecordSet(**record)
-            records.append(rrset)
+    @staticmethod
+    def get_rrsets_as_objects(rrsets):
+        """Return a list of rrsets as GCPResourceRecordSets.
+
+        Args:
+            rrsets (list of dict): RRsets represented as dicts.
+        Returns:
+            list of :class:`GCPResourceRecordSet` objects.
+        """
+        return [GCPResourceRecordSet(**rrset) for rrset in rrsets]
 
     def get_managed_zone(self, zone):
         """Get the GDNS managed zone name for a DNS zone.
@@ -142,7 +147,7 @@ class GDNSClient(http.AIOConnection):
         Args:
             zone (str): Desired DNS zone to query.
         Returns:
-            list of :class:`GCPResourceRecordSet` instances.
+            list of dicts representing rrsets.
         """
         managed_zone = self.get_managed_zone(zone)
         url = f'{self._base_url}/managedZones/{managed_zone}/rrsets'
@@ -161,7 +166,7 @@ class GDNSClient(http.AIOConnection):
             if next_page_token:
                 params['pageToken'] = next_page_token
             response = await self.get_json(url, params=params)
-            self._parse_resp_to_records(response, records)
+            records.extend(response['rrsets'])
             next_page_token = response.get('nextPageToken')
             if not next_page_token:
                 break

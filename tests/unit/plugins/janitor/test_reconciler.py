@@ -43,8 +43,6 @@ def full_config(minimal_config):
 async def dns_client(mocker, monkeypatch):
     mock = mocker.Mock(gdns.GDNSClient)
     mock._session = aiohttp.ClientSession()
-    monkeypatch.setattr(
-        'gordon_gcp.plugins.janitor.reconciler.gdns.GDNSClient', mock)
     yield mock
     await mock._session.close()
 
@@ -234,13 +232,9 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
         rrsets = fake_response_data['rrsets']
         rrsets[0]['rrdatas'] = ['10.4.5.6']
         rrsets.append(extra_rrset)
-        return [
-            gdns.GCPResourceRecordSet(**kw) for kw in rrsets
-        ]
+        return rrsets
 
-    monkeypatch.setattr(
-        recon_client.dns_client, 'get_records_for_zone',
-        mock_get_records_for_zone)
+    recon_client.dns_client.get_records_for_zone = mock_get_records_for_zone
 
     input_rrsets = []
     expected_missing_rrsets = []
