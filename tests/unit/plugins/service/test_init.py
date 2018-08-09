@@ -34,7 +34,8 @@ def consumer_config(fake_keyfile):
         'keyfile': fake_keyfile,
         'project': 'test-example',
         'topic': 'a-topic',
-        'subscription': 'a-subscription'
+        'subscription': 'a-subscription',
+        'max_msg_age': 1000
     }
 
 
@@ -129,6 +130,43 @@ def test_get_event_consumer_config_raises(config_key, exp_msg, consumer_config,
     subscriber_client.create_subscription.assert_not_called()
 
     e.match('Invalid configuration:\n' + exp_msg)
+    assert 1 == len(caplog.records)
+
+
+def test_get_event_consumer_max_msg_age_set(consumer_config, auth_client,
+                                            subscriber_client, caplog, emulator,
+                                            metrics):
+    """max_msg_age is correctly set."""
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    plugin = service.get_event_consumer(consumer_config, success_chnl,
+                                        error_chnl, metrics)
+    assert consumer_config['max_msg_age'] == plugin._max_msg_age
+
+
+def test_get_event_consumer_max_msg_age_unset(consumer_config, auth_client,
+                                              subscriber_client, caplog,
+                                              emulator, metrics):
+    """max_msg_age is unset (default)."""
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    consumer_config.pop('max_msg_age')
+    plugin = service.get_event_consumer(consumer_config, success_chnl,
+                                        error_chnl, metrics)
+    assert 300 == plugin._max_msg_age
+
+
+@pytest.mark.parametrize('pw_value', ['not_a_number', 0])
+def test_get_event_consumer_max_msg_age_invalid(consumer_config, auth_client,
+                                                subscriber_client, caplog,
+                                                emulator, metrics, pw_value):
+    """max_msg_age is invalid"""
+    consumer_config['max_msg_age'] = pw_value
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    with pytest.raises(exceptions.GCPConfigError) as e:
+        service.get_event_consumer(
+            consumer_config, success_chnl, error_chnl, metrics)
+    subscriber_client.create_subscription.assert_not_called()
+    e.match('Invalid configuration:\nInvalid value for max_msg_age \\(discard '
+            'messages older than this many seconds\\).')
     assert 1 == len(caplog.records)
 
 

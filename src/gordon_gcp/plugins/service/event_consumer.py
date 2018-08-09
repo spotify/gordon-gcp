@@ -143,6 +143,13 @@ class GPSEventConsumerBuilder:
                    'Cloud Pub/Sub is required.')
             errors.append(msg)
 
+        if ('max_msg_age' in self.config and
+                (not isinstance(self.config['max_msg_age'], int) or
+                    self.config['max_msg_age'] < 1)):
+            msg = ('Invalid value for max_msg_age (discard messages older than '
+                   'this many seconds).')
+            errors.append(msg)
+
         if errors:
             exp_msg = 'Invalid configuration:\n'
             for error in errors:
@@ -264,6 +271,7 @@ class GPSEventConsumer:
         self._message_schemas = validator.schemas.keys()
         self._loop = loop
         self._logger = logging.getLogger('')
+        self._max_msg_age = config.get('max_msg_age', 300)
 
     async def handle_message(self, event_msg):
         """Ack Pub/Sub message and update event message history.
@@ -303,6 +311,21 @@ class GPSEventConsumer:
         msg_logger = _utils.GEventMessageLogger(
             self._logger, {'msg_id': msg_id})
         msg_logger.info('Received new message.')
+
+        msg_datetime = pubsub_msg.publish_time
+        # need a non-TZ-aware object in UTC
+        cur_datetime = datetime.datetime.utcnow()
+        msg_age = (cur_datetime - msg_datetime).total_seconds()
+        if msg_age > self._max_msg_age:
+            msg_logger.warn(f'Message is too old ({msg_age} seconds), '
+                            'acking and discarding.')
+            context = {
+                'msg_id': msg_id,
+                'msg_age': msg_age
+            }
+            await self.metrics.incr('msg-too-old', context=context)
+            pubsub_msg.ack()
+            return
 
         try:
             data = json.loads(pubsub_msg.data)
