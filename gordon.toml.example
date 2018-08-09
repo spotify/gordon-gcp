@@ -18,6 +18,7 @@ keyfile = "/path/to/keyfiles/pubsub.json"
 topic = "my-dns-changes"
 subscription = "gordon-consumer"
 max_messages = 25
+max_msg_age = 300
 
 [gcp.publisher]
 project = "my-dns-project"

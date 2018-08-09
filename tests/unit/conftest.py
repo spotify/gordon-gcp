@@ -282,5 +282,20 @@ def emulator(monkeypatch):
 
 
 @pytest.fixture
-def metrics(mocker):
-    return mocker.Mock()
+def metrics(mocker, monkeypatch):
+    incr = mocker.Mock()
+    set_ = mocker.Mock()
+
+    async def incr_func(*args, **kwargs):
+        incr(*args, **kwargs)
+
+    async def set_func(*args, **kwargs):
+        set_(*args, **kwargs)
+
+    metrics = mocker.Mock()
+
+    monkeypatch.setattr(metrics, 'incr_mock', incr)
+    monkeypatch.setattr(metrics, 'set_mock', set_)
+    monkeypatch.setattr(metrics, 'incr', incr_func)
+    monkeypatch.setattr(metrics, 'set', set_func)
+    return metrics

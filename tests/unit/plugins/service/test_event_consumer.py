@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import asyncio
+import datetime
 import json
 import threading
 
@@ -51,9 +52,12 @@ def raw_msg_data(creation_audit_log_data):
 
 @pytest.fixture
 def pubsub_msg(mocker, raw_msg_data):
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
     pubsub_msg = mocker.MagicMock(pubsub_v1.subscriber.message.Message)
     pubsub_msg.message_id = 1234
     pubsub_msg.data = bytes(json.dumps(raw_msg_data), encoding='utf-8')
+    # need a non-TZ-aware object in UTC
+    pubsub_msg.publish_time = datetime.datetime.utcnow()
     return pubsub_msg
 
 
@@ -167,7 +171,10 @@ def test_event_consumer_default(mocker, subscriber_client, flow_control,
                                 validator, parser, event_loop, channel_pair,
                                 metrics):
     """GPSEventConsumer implements IEventConsumerClient"""
-    config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
+    config = {
+        'subscription': '/projects/test-project/subscriptions/test-sub',
+        'max_msg_age': 1000
+    }
     success, error = channel_pair
     client = event_consumer.GPSEventConsumer(
         config, success, error, metrics, subscriber_client, flow_control,
@@ -193,7 +200,10 @@ def test_event_consumer_default(mocker, subscriber_client, flow_control,
 @pytest.fixture
 def consumer(subscriber_client, flow_control, validator, event_loop,
              channel_pair, metrics):
-    config = {'subscription': '/projects/test-project/subscriptions/test-sub'}
+    config = {
+        'subscription': '/projects/test-project/subscriptions/test-sub',
+        'max_msg_age': 1000
+    }
     success, error = channel_pair
     parser = parse.MessageParser()
     client = event_consumer.GPSEventConsumer(
@@ -349,6 +359,31 @@ async def test_handle_pubsub_msg_invalid(mocker, monkeypatch, consumer, caplog,
     mock_create_gevent_msg.assert_not_called()
     assert 0 == consumer.success_channel.qsize()
     assert 3 == len(caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_handle_pubsub_msg_old(mocker, monkeypatch, consumer,
+                                     raw_msg_data, creation_audit_log_data,
+                                     caplog, pubsub_msg, mock_get_and_validate,
+                                     mock_create_gevent_msg):
+    """Too-old message."""
+    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
+    pubsub_msg.publish_time -= datetime.timedelta(
+        seconds=(consumer._max_msg_age + 1))
+    context = {
+        'msg_id': pubsub_msg.message_id,
+        'msg_age': consumer._max_msg_age + 1
+    }
+
+    await consumer._handle_pubsub_msg(pubsub_msg)
+
+    assert 2 == len(caplog.records)
+    consumer.metrics.incr_mock.assert_called_once_with(
+        'msg-too-old', context=context)
+    pubsub_msg.ack.assert_called_once_with()
+    mock_get_and_validate.assert_not_called()
+    mock_create_gevent_msg.assert_not_called()
+    assert consumer.success_channel.empty()
 
 
 def test_create_gevent_msg(mocker, pubsub_msg, raw_msg_data, consumer):

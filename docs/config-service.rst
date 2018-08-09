@@ -66,6 +66,9 @@ All configuration options above in the general ``[gcp]`` may be used here. Addit
 
     `Optional`: Number of Pub/Sub messages to process at a time. Defaults to 25.
 
+.. option:: max_msg_age=INT
+
+    `Optional`: Discard incoming messages older than this many seconds.  Defaults to 300.
 
 ``[gcp.enricher]``
 ~~~~~~~~~~~~~~~~~~
