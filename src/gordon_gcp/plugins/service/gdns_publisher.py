@@ -28,7 +28,6 @@ core system.
 
 import asyncio
 import datetime
-import json
 import logging
 import numbers
 
@@ -37,7 +36,7 @@ from gordon import interfaces
 
 from gordon_gcp import exceptions
 from gordon_gcp.clients import auth
-from gordon_gcp.clients import http
+from gordon_gcp.clients import gdns
 from gordon_gcp.plugins import _utils
 
 
@@ -58,9 +57,11 @@ class GDNSPublisherBuilder:
         self.metrics = metrics
         self.kwargs = kwargs
         self.validate_config_funcs = [
-            self._validate_keyfile, self._validate_project,
-            self._validate_dns_zone, self._validate_managed_zone,
-            self._validate_publish_timeout, self._validate_default_ttl
+            self._validate_keyfile,
+            self._validate_project,
+            self._validate_dns_zone,
+            self._validate_publish_timeout,
+            self._validate_default_ttl
         ]
 
     def _validate_keyfile(self, errors):
@@ -83,12 +84,6 @@ class GDNSPublisherBuilder:
         elif not self.config.get('dns_zone', '').endswith('.'):
             msg = ('A dns zone must be an FQDN and end with the root zone '
                    '(".").')
-            errors.append(msg)
-
-    def _validate_managed_zone(self, errors):
-        if not self.config.get('managed_zone'):
-            msg = ('A managed zone is required to publish records to Google '
-                   'Cloud DNS.')
             errors.append(msg)
 
     def _validate_publish_timeout(self, errors):
@@ -133,15 +128,15 @@ class GDNSPublisherBuilder:
         return auth.GAuthClient(
             keyfile=self.config['keyfile'], scopes=scopes)
 
-    def _init_http_client(self):
+    def _init_dns_client(self):
         auth_client = self._init_auth_client()
-        return http.AIOConnection(auth_client=auth_client)
+        return gdns.GDNSClient(self.config['project'], auth_client)
 
     def build_publisher(self):
         self._validate_config()
-        http_client = self._init_http_client()
+        dns_client = self._init_dns_client()
         return GDNSPublisher(
-            self.config, self.metrics, http_client, **self.kwargs)
+            self.config, self.metrics, dns_client, **self.kwargs)
 
 
 @zope.interface.implementer(interfaces.IMessageHandler)
@@ -155,21 +150,14 @@ class GDNSPublisher:
         error_channel (asyncio.Queue): A sink for
             :interface:`interfaces.IEventMessages` that were not
             processed due to problems.
-        http_client (http.AIOConnection):
-            A Google HTTP connection class.
+        dns_client (gdns.GDNSClient):
+            A Google DNS HTTP connection class.
     """
     phase = 'publish'
-    BASE_CHANGES_ENDPOINT = ('https://www.googleapis.com/dns/{version}'
-                             '/projects/{project}/managedZones/{managedZone}'
-                             '/changes')
-    RESOURCE_RECORDS_ENDPOINT = ('https://www.googleapis.com/dns/v1/projects/'
-                                 '{project}/managedZones/{managedZone}/rrsets')
-    # see https://cloud.google.com/dns/api/v1/changes#resource
-    DNS_CHANGES_DONE = 'done'
 
-    def __init__(self, config, metrics, http_client, **kwargs):
+    def __init__(self, config, metrics, dns_client, **kwargs):
         self.config = config
-        self.http_client = http_client
+        self.dns_client = dns_client
         self.metrics = metrics
         self.publish_wait_timeout = self.config.get('publish_wait_timeout', 60)
         self.project = self.config['project']
@@ -195,82 +183,52 @@ class GDNSPublisher:
             action: [resource_record]
         }
 
-    async def _publish_changes(self, changes, base_changes_url):
-        """Publish changes to the Google DNS Changes API.
+    async def _get_rrsets_by_name_and_type(self, zone, rrset):
+        """Get rrsets from GDNS matching a given rrsets's name and type.
 
         Args:
-            changes (dict): The DNS record changes to publish.
-            base_changes_url (str): The URL to use to publish changes.
+            zone (str): The DNS zone name.
+            rrset (dict): The rrset from which to get the name and type.
 
         Returns:
-            change_id (str): Change ID of the Changes resource.
+            (list[dict]): The matching rrsets.
         """
-        resp = await self.http_client.request(
-            'post', base_changes_url, json=changes)
-        resp_dict = json.loads(resp)
-
-        # TODO: create another task to measure propagation time
-        return resp_dict['id']
-
-    async def _handle_additions_conflict(self, changes, resource_records_url):
-        """Compensate for an additions Changes request that returns an HTTP
-           409.
-
-            WARNING: This function fetches _all_ records in a given Managed
-            Zone and may be slow if the zone contains many records.
-
-        Args:
-            changes (dict): Changes containing an addition conflict.
-            resource_records_url (str): The URL to use to get the zone's
-                resource records.
-
-        Returns:
-            dict containing original additions plus deletions.
-        """
-        record_name = changes['additions'][0]['name']
-        record_type = changes['additions'][0]['type']
+        record_name = rrset['name']
+        record_type = rrset['type']
         search_params = {
             'name': record_name,
             'type': record_type
         }
-        response = await self.http_client.get_json(
-            resource_records_url, params=search_params)
-        if response['rrsets']:
-            changes['deletions'] = response['rrsets']
-        return changes
+        return await self.dns_client.get_records_for_zone(
+            zone, params=search_params)
 
-    async def _changes_published(self, change_id, base_changes_url):
-        """Checks if a given Change resource has a completed status.
-
-        See DNS_CHANGES_DONE.
+    async def _is_change_done(self, zone, change_id):
+        """Checks if a Change resource has completed (within the timeout).
 
         Args:
+            zone (str): The DNS zone name.
             change_id (str): Change ID of the Changes resource.
-            base_changes_url (str): The URL prefix to use to check on changes.
-
         Returns:
             True if the changes are done, False if anything else.
         """
-        change_id_url = f'{base_changes_url}/{change_id}'
         timeout = datetime.timedelta(seconds=self.publish_wait_timeout)
         start = datetime.datetime.now()
         end = start + timeout
 
         while datetime.datetime.now() < end:
-            resp = await self.http_client.get_json(change_id_url)
-            if resp['status'] == GDNSPublisher.DNS_CHANGES_DONE:
+            if await self.dns_client.is_change_done(zone):
                 return True
             await asyncio.sleep(1)
 
         return False
 
-    async def _dispatch_changes(self, resource_record, managed_zone, action,
+    async def _dispatch_changes(self, resource_record, zone, action,
                                 logger):
         """Publish changes for one record, making sure they are completed.
 
         Args:
             resource_record (dict): A resource record to change.
-            managed_zone (str): The managed zone name in Google DNS.
+            zone (str): The DNS zone name.
             action (str): The action to take (e.g. 'additions').
             logger (object): An object to log with.
 
@@ -278,18 +236,10 @@ class GDNSPublisher:
             GCPPublishRecordTimeoutError if publishing of records exceeds wait
                 timeout.
         """
-        base_changes_url = GDNSPublisher.BASE_CHANGES_ENDPOINT.format(
-            version=self.api_version, project=self.project,
-            managedZone=managed_zone)
-        resource_records_url = GDNSPublisher.RESOURCE_RECORDS_ENDPOINT.format(
-            project=self.project, managedZone=managed_zone)
-
-        changes_to_publish = self._format_resource_record_changes(
+        changes = self._format_resource_record_changes(
             action, resource_record)
         try:
-            change_id = await self._publish_changes(
-                changes_to_publish, base_changes_url)
-
+            change_id = await self.dns_client.publish_changes(zone, changes)
         except exceptions.GCPHTTPResponseError as e:
             if e.status != 409:
                 raise e
@@ -297,14 +247,14 @@ class GDNSPublisher:
             msg = ('Conflict found when publishing records. Handling and '
                    'retrying.')
             logger.info(msg)
-            changes_to_publish = await self._handle_additions_conflict(
-                changes_to_publish, resource_records_url)
-            change_id = await self._publish_changes(changes_to_publish,
-                                                    base_changes_url)
 
-        change_complete = await self._changes_published(change_id,
-                                                        base_changes_url)
-        if not change_complete:
+            # get the records GDNS has for this name and type
+            deletions = await self._get_rrsets_by_name_and_type(
+                zone, changes['additions'][0])
+            changes['deletions'] = deletions
+            change_id = await self.dns_client.publish_changes(zone, changes)
+
+        if not await self._is_change_done(zone, change_id):
             msg = ('Timed out while waiting for DNS changes to transition '
                    'to \'done\' status.')
             logger.error(msg)
@@ -336,7 +286,7 @@ class GDNSPublisher:
                     raise exceptions.InvalidDNSZoneInMessageError(msg)
 
                 await self._dispatch_changes(
-                    resource_record, self.config['managed_zone'],
+                    resource_record, self.config['dns_zone'],
                     event_msg.data['action'], msg_logger)
         else:
             msg = ('No records published or deleted as no resource records were'

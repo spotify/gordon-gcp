@@ -14,10 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
+import datetime
 
 import pytest
-from google.cloud import pubsub_v1
 from gordon import interfaces
 
 from gordon_gcp import exceptions
@@ -31,29 +30,12 @@ from gordon_gcp.plugins.service import gdns_publisher
 @pytest.fixture
 def config():
     return {
-        'managed_zone': 'example-com',
         'dns_zone': 'example.com.',
         'project': 'fakeproject',
         'api_version': 'v1',
         'default_ttl': 300,
         'publish_wait_timeout': 10
     }
-
-
-@pytest.fixture
-def rrsets_url(config):
-    project = config['project']
-    managed_zone = config['managed_zone']
-    return (f'https://www.googleapis.com/dns/v1/projects/{project}/'
-            f'managedZones/{managed_zone}/rrsets')
-
-
-@pytest.fixture
-def changes_url(config):
-    project = config['project']
-    managed_zone = config['managed_zone']
-    return (f'https://www.googleapis.com/dns/v1/projects/{project}/'
-            f'managedZones/{managed_zone}/changes')
 
 
 @pytest.fixture
@@ -173,90 +155,49 @@ def handled_conflict_changes_req():
 
 
 @pytest.fixture
-def handled_conflict_changes_done():
-    return {
-        'kind': 'dns#change',
-        'additions': [
-            {
-                'kind': 'dns#resourceRecordSet',
-                'name': 'service.example.com.',
-                'type': 'A',
-                'ttl': 3600,
-                'rrdatas': ['127.0.0.1', '127.0.0.2']
-            }
-        ],
-        'deletions': [
-            {
-                'kind': 'dns#resourceRecordSet',
-                'name': 'service.example.com.',
-                'type': 'A',
-                'ttl': 3600,
-                'rrdatas': ['127.0.0.1']
-            }
-        ],
-        'startTime': '2018-05-01T18:41:51.577Z',
-        'id': '13',
-        'status': 'done'
-    }
-
-
-@pytest.fixture
 def matching_zone_records():
-    return {
-        'kind': 'dns#resourceRecordSetsListResponse',
-        'rrsets': [{
-            'kind': 'dns#resourceRecordSet',
-            'name': 'service.example.com.',
-            'type': 'A',
-            'ttl': 3600,
-            'rrdatas': ['127.0.0.1']
-        }]
-    }
+    return [{
+        'kind': 'dns#resourceRecordSet',
+        'name': 'service.example.com.',
+        'type': 'A',
+        'ttl': 3600,
+        'rrdatas': ['127.0.0.1']
+    }]
 
 
 @pytest.fixture
-def matching_zone_records_empty():
-    return {
-        'kind': 'dns#resourceRecordSetsListResponse',
-        'rrsets': []
-    }
-
-
-@pytest.fixture
-def pubsub_message(mocker):
-    pubsub_msg = mocker.MagicMock(pubsub_v1.subscriber.message.Message)
-    pubsub_msg.message_id = 1234
-    return pubsub_msg
-
-
-@pytest.fixture
-def event_message(mocker, event_msg_data, pubsub_message):
+def event_message(mocker, event_msg_data):
     event_msg = mocker.MagicMock(event_consumer.GEventMessage)
-    event_msg.msg_id = pubsub_message.message_id
+    event_msg.msg_id = 'some-id-1234567890'
     event_msg.data = event_msg_data
     event_msg.phase = ''
     return event_msg
 
 
 @pytest.fixture
-def mock_http_client(mocker, create_mock_coro):
-    get_json_mock, get_json_coro = create_mock_coro()
-    request_post_mock, post_request_coro = create_mock_coro()
+def mock_dns_client(mocker, create_mock_coro, matching_zone_records,
+                    initial_changes_resp):
+    client = mocker.MagicMock()
+    get_mock, get_coro = create_mock_coro()
+    get_mock.return_value = matching_zone_records
+    mocker.patch.object(client, 'get_records_for_zone', get_coro)
+    mocker.patch.object(client, '_get_records_for_zone_mock', get_mock)
 
-    http_client = mocker.MagicMock()
+    post_mock, post_coro = create_mock_coro()
+    post_mock.return_value = initial_changes_resp
+    mocker.patch.object(client, 'publish_changes', post_coro)
+    mocker.patch.object(client, '_publish_changes_mock', post_mock)
 
-    mocker.patch.object(http_client, 'get_json', get_json_coro)
-    mocker.patch.object(http_client, '_get_json_mock', get_json_mock)
-
-    mocker.patch.object(http_client, 'request', post_request_coro)
-    mocker.patch.object(http_client, '_request_post_mock', request_post_mock)
-
-    return http_client
+    done_mock, done_coro = create_mock_coro()
+    done_mock.return_value = True
+    mocker.patch.object(client, 'is_change_done', done_coro)
+    mocker.patch.object(client, '_is_change_done_mock', done_mock)
+    return client
 
 
 @pytest.fixture
-def gdns_publisher_instance(mocker, mock_http_client, config, metrics):
-    pb = gdns_publisher.GDNSPublisher(config, metrics, mock_http_client)
+def gdns_publisher_instance(mocker, mock_dns_client, config, metrics):
+    pb = gdns_publisher.GDNSPublisher(config, metrics, mock_dns_client)
     return pb
 
 
@@ -273,22 +214,13 @@ def mock_sleep(mocker):
 #####
 # GDNS Publisher Tests
 #####
-# For some reason, the event loop for this test leaks over to
-# tests.unit.plugins.service.test_event_consumer:test_gpsthread_add_task so
-# there's a warning of not awaiting the coroutine (which is expected).
-# Threads + asyncio + testing is hard.
-@pytest.mark.filterwarnings(
-    "ignore:coroutine 'test_gpsthread_add_task.<locals>.noop' was never "
-    "awaited")
-def test_implements_interface(mocker, config, metrics):
+def test_implements_interface(gdns_publisher_instance, metrics):
     """GDNSPublisher implements IMessageHandler"""
-    http_client = mocker.Mock()
-    plugin = gdns_publisher.GDNSPublisher(config, metrics, http_client)
 
-    assert interfaces.IMessageHandler.providedBy(plugin)
+    assert interfaces.IMessageHandler.providedBy(gdns_publisher_instance)
     assert interfaces.IMessageHandler.implementedBy(
         gdns_publisher.GDNSPublisher)
-    assert 'publish' == plugin.phase
+    assert 'publish' == gdns_publisher_instance.phase
 
 
 @pytest.mark.asyncio
@@ -308,56 +240,44 @@ async def test_handle_message_raises_exception_on_invalid_zone(
 @pytest.mark.asyncio
 async def test_handle_message_handles_update_conflict(
         gdns_publisher_instance, event_message,
-        matching_zone_records, rrsets_url, changes_url,
         initial_changes_req, handled_conflict_changes_req,
         initial_changes_pending_json_resp, initial_changes_resp, caplog,
-        mocker):
+        mocker, mock_dns_client):
     """Ensure changes with update conflicts are successfully published"""
-    expected_change_id = json.loads(initial_changes_pending_json_resp)['id']
     event_message.data['resourceRecords'] = initial_changes_req['additions']
-
-    gdns_publisher_instance.http_client._request_post_mock.side_effect = [
+    mock_dns_client._publish_changes_mock.side_effect = [
         exceptions.GCPHTTPResponseError('409', 409),
         initial_changes_pending_json_resp]
-    gdns_publisher_instance.http_client._get_json_mock.side_effect = [
-        matching_zone_records, initial_changes_resp]
 
     await gdns_publisher_instance.handle_message(event_message)
-
-    expected_get_json_calls = [
-        mocker.call(rrsets_url),
-        mocker.call(f'{changes_url}/{expected_change_id}')
-    ]
-
-    gdns_publisher_instance.http_client._get_json_mock.has_calls(
-        expected_get_json_calls)
-    gdns_publisher_instance.http_client._request_post_mock.assert_called_with(
-        'post', changes_url, json=handled_conflict_changes_req)
+    mock_dns_client._publish_changes_mock.assert_called_with(
+        'example.com.', handled_conflict_changes_req)
     assert 3 == len(caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_handle_message_raises_exception_on_publish_timeout(
-        gdns_publisher_instance, event_message, changes_url,
-        initial_changes_req, initial_changes_resp,
-        initial_changes_pending_json_resp, mock_sleep, caplog):
+        gdns_publisher_instance, event_message, mock_dns_client,
+        initial_changes_req, mock_sleep, caplog, mocker):
     """Ensure exception raised when publish wait timeout exceeded."""
-    gdns_publisher_instance.publish_wait_timeout = 0.0001
+    start = datetime.datetime(2018, 1, 1, 11, 30, 0)
+    mockdatetime = mocker.Mock()
+    mockdatetime.now = mocker.Mock(side_effect=[
+        start, start, start + datetime.timedelta(
+            seconds=gdns_publisher_instance.config['publish_wait_timeout'] + 1)
+    ])
+    mocker.patch(
+        'gordon_gcp.plugins.service.gdns_publisher.datetime.datetime',
+        mockdatetime)
     event_message.data['resourceRecords'] = initial_changes_req['additions']
-    gdns_publisher_instance.http_client._request_post_mock.return_value = \
-        initial_changes_pending_json_resp
-    initial_changes_resp['status'] = 'pending'
-    gdns_publisher_instance.http_client._get_json_mock.return_value = \
-        initial_changes_resp
+    mock_dns_client._is_change_done_mock.return_value = False
 
-    with pytest.raises(exceptions.GCPPublishRecordTimeoutError) as error:
+    with pytest.raises(exceptions.GCPPublishRecordTimeoutError) as e:
         await gdns_publisher_instance.handle_message(event_message)
 
-    assert error.match('Timed out while waiting for DNS changes to transition '
-                       'to \'done\' status.')
-    expected_change_id = json.loads(initial_changes_pending_json_resp)['id']
-    gdns_publisher_instance.http_client._get_json_mock.assert_called_with(
-        f'{changes_url}/{expected_change_id}')
+    assert e.match('Timed out while waiting for DNS changes to transition '
+                   'to \'done\' status.')
+
     mock_sleep.assert_called_with(1)
     assert 2 == len(caplog.records)
 
@@ -371,32 +291,17 @@ http_exceptions = [
 
 @pytest.mark.parametrize('exception_args,http_exception', http_exceptions)
 @pytest.mark.asyncio
-async def test__dispatch_changes_http_exceptions_raised(
+async def test_dispatch_changes_http_exceptions_raised(
         gdns_publisher_instance, resource_record,
         exception_args, http_exception):
     """Exception is raised when getting HTTP error from Google API."""
 
-    gdns_publisher_instance.http_client._request_post_mock.side_effect = \
+    gdns_publisher_instance.dns_client._publish_changes_mock.side_effect = \
         http_exception(*exception_args)
 
     with pytest.raises(http_exception):
         await gdns_publisher_instance._dispatch_changes(
             resource_record, None, None, None)
-
-
-@pytest.mark.asyncio
-async def test__handle_message_returns_change_id(
-        gdns_publisher_instance, initial_changes_req,
-        changes_url, initial_changes_pending_json_resp):
-    """Ensure change ID is returned from Google API."""
-    expected_change_id = json.loads(initial_changes_pending_json_resp)['id']
-    gdns_publisher_instance.http_client._request_post_mock.return_value = (
-        initial_changes_pending_json_resp)
-
-    change_id = await gdns_publisher_instance._publish_changes(
-        initial_changes_req, changes_url)
-
-    assert expected_change_id == change_id
 
 
 @pytest.mark.asyncio
@@ -412,21 +317,12 @@ async def test_handle_message_no_resource_records(
             ' present' in caplog.text)
 
 
-conflict_types = [
-    (matching_zone_records(), handled_conflict_changes_req()),
-    (matching_zone_records_empty(), initial_changes_req())
-]
-
-
-@pytest.mark.parametrize('existing,output', conflict_types)
 @pytest.mark.asyncio
-async def test__handle_additions_conflict(
-        gdns_publisher_instance, existing, initial_changes_req, rrsets_url,
-        output):
+async def test_get_rrsets_by_name_and_type(
+        gdns_publisher_instance, initial_changes_req,
+        handled_conflict_changes_req):
     """Test correctly handling an additions conflict."""
-    gdns_publisher_instance.http_client._get_json_mock.return_value = existing
+    deletions = await gdns_publisher_instance._get_rrsets_by_name_and_type(
+        'example.com.', initial_changes_req['additions'][0])
 
-    changes = await gdns_publisher_instance._handle_additions_conflict(
-        initial_changes_req, rrsets_url)
-
-    assert changes == output
+    assert handled_conflict_changes_req['deletions'] == deletions

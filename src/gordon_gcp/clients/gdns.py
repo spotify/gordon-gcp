@@ -44,7 +44,7 @@ To use:
     #                      rrdatas=['10.1.2.3'], ttl=300)
 
 """
-
+import json
 import logging
 
 import attr
@@ -97,6 +97,9 @@ class GDNSClient(http.AIOConnection):
             object attached to :obj:`auth_client` if not provided.
     """
     BASE_URL = 'https://www.googleapis.com/dns'
+    # see https://cloud.google.com/dns/api/v1/changes#resource
+    DNS_CHANGES_DONE = 'done'
+    REVERSE_PREFIX = 'reverse-'
 
     def __init__(self, project=None, auth_client=None, api_version='v1',
                  session=None):
@@ -104,29 +107,62 @@ class GDNSClient(http.AIOConnection):
         self.project = project
         self._base_url = f'{self.BASE_URL}/{api_version}/projects/{project}'
 
-    def _parse_resp_to_records(self, response, records):
-        unparsed_records = response.get('rrsets', [])
-        for record in unparsed_records:
-            rrset = GCPResourceRecordSet(**record)
-            records.append(rrset)
-
-    async def get_records_for_zone(self, zone):
-        """Get all resource record sets for a particular managed zone.
+    @staticmethod
+    def get_rrsets_as_objects(rrsets):
+        """Return a list of rrsets as GCPResourceRecordSets.
 
         Args:
-            zone (str): Desired managed zone to query.
+            rrsets (list of dict): RRsets represented as dicts.
         Returns:
-            list of :class:`GCPResourceRecordSet` instances.
+            list of :class:`GCPResourceRecordSet` objects.
         """
-        url = f'{self._base_url}/managedZones/{zone}/rrsets'
+        return [GCPResourceRecordSet(**rrset) for rrset in rrsets]
 
-        # to limit the amount of data across the wire; also makes it
-        # easier to create GCPResourceRecordSet instances
-        fields = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
-                  'rrsets/type,rrsets/ttl,nextPageToken')
-        params = {
-            'fields': fields,
-        }
+    def get_managed_zone(self, zone):
+        """Get the GDNS managed zone name for a DNS zone.
+
+        Google uses custom string names with specific `requirements
+        <https://cloud.google.com/dns/api/v1/managedZones#resource>`_
+        for storing records. The scheme implemented here chooses a
+        managed zone name which removes the trailing dot and replaces
+        other dots with dashes, and in the case of reverse records,
+        uses only the two most significant octets, prepended with
+        'reverse'.
+
+        Example:
+           get_managed_zone('example.com.') = 'example-com'
+           get_managed_zone('30.20.10.in-addr.arpa.) = 'reverse-20-10'
+
+        Args:
+            zone (str): DNS zone.
+        Returns:
+            str of managed zone name.
+
+        """
+        if zone.endswith('.in-addr.arpa.'):
+            return self.REVERSE_PREFIX + '-'.join(zone.split('.')[-5:-3])
+        return '-'.join(zone.split('.')[:-1])
+
+    async def get_records_for_zone(self, dns_zone, params=None):
+        """Get all resource record sets for a managed zone, using the DNS zone.
+
+        Args:
+            dns_zone (str): Desired DNS zone to query.
+            params (dict): (optional) Additional query parameters for HTTP
+                requests to the GDNS API.
+        Returns:
+            list of dicts representing rrsets.
+        """
+        managed_zone = self.get_managed_zone(dns_zone)
+        url = f'{self._base_url}/managedZones/{managed_zone}/rrsets'
+
+        if not params:
+            params = {}
+
+        if 'fields' not in params:
+            # makes it easier to create GCPResourceRecordSet instances
+            params['fields'] = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
+                                'rrsets/type,rrsets/ttl,nextPageToken')
         next_page_token = None
 
         records = []
@@ -134,10 +170,39 @@ class GDNSClient(http.AIOConnection):
             if next_page_token:
                 params['pageToken'] = next_page_token
             response = await self.get_json(url, params=params)
-            self._parse_resp_to_records(response, records)
+            records.extend(response['rrsets'])
             next_page_token = response.get('nextPageToken')
             if not next_page_token:
                 break
 
-        logging.info(f'Found {len(records)} for zone "{zone}".')
+        logging.info(f'Found {len(records)} for zone "{dns_zone}".')
         return records
+
+    async def is_change_done(self, zone, change_id):
+        """Check if a DNS change has completed.
+
+        Args:
+            zone (str): DNS zone of the change.
+            change_id (str): Identifier of the change.
+        Returns:
+            Boolean
+        """
+        zone_id = self.get_managed_zone(zone)
+        url = f'{self._base_url}/managedZones/{zone_id}/changes/{change_id}'
+        resp = await self.get_json(url)
+        return resp['status'] == self.DNS_CHANGES_DONE
+
+    async def publish_changes(self, zone, changes):
+        """Post changes to a zone.
+
+        Args:
+            zone (str): DNS zone of the change.
+            changes (dict): JSON compatible dict of a `Change
+                <https://cloud.google.com/dns/api/v1/changes>`_.
+        Returns:
+            string identifier of the change.
+        """
+        zone_id = self.get_managed_zone(zone)
+        url = f'{self._base_url}/managedZones/{zone_id}/changes'
+        resp = await self.request('post', url, json=changes)
+        return json.loads(resp)['id']
