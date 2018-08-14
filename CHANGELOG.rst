@@ -1,6 +1,24 @@
 Changelog
 =========
 
+0.0.1.dev19 (2018-08-14)
+------------------------
+
+Fixed
+~~~~~
+* Fix paging of GDNS responses.
+* Make setup.py work with direct github commit links.
+
+Added
+~~~~~
+* Drop messages older than a limit.
+
+Changed
+~~~~~~~
+* Remove managed zone from plugin configuration in favor of automated conversion from DNS zone.
+* Do DNS zone to managed zone conversion only in GDNSClient.
+
+
 0.0.1.dev18 (2018-08-01)
 ------------------------
 
