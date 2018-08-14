@@ -56,7 +56,17 @@ def install_requires():
     reqs_txt = read('requirements.txt')
     parsed = reqs_txt.split('\n')
     parsed = [r.split('==')[0] for r in parsed]
-    return [r for r in parsed if len(r) > 0]
+    # this breaks the '-e .' in docs-requirements.txt; git lines need to be
+    # added there as well as requirements.txt
+    # (-e . only looks at install_required, not dependency_links, so it won't
+    # pick up the things we're excluding)
+    return [r for r in parsed if len(r) > 0 and not r.startswith('git')]
+
+
+def dependency_links():
+    reqs_txt = read('requirements.txt')
+    parsed = reqs_txt.split('\n')
+    return [r for r in parsed if len(r) > 0 and r.startswith('git')]
 
 
 #####
@@ -112,4 +122,5 @@ setup(
     keywords=KEYWORDS,
     zip_safe=False,
     install_requires=install_requires(),
+    dependency_links=dependency_links()
 )

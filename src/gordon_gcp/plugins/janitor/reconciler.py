@@ -282,11 +282,10 @@ class GDNSReconciler:
         Returns:
             tuple[list[rrset], list[rrset]]: The missing and extra rrset lists.
         """
-        desired_rrsets = [
-            gdns.GCPResourceRecordSet(**record) for record in rrsets
-        ]
+        desired_rrsets = gdns.GDNSClient.get_rrsets_as_objects(rrsets)
 
-        actual_rrsets = await self.dns_client.get_records_for_zone(zone)
+        actual_rrsets = gdns.GDNSClient.get_rrsets_as_objects(
+            await self.dns_client.get_records_for_zone(zone))
 
         missing_rrsets = [
             rs for rs in desired_rrsets if rs not in actual_rrsets

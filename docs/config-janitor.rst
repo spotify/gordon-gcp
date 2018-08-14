@@ -74,9 +74,11 @@ All configuration options from the general ``[gcp]`` section may be used here.
 
 Additional plugin-specific configuration is needed:
 
-.. option:: zone="STR"
+.. option:: dns_zone="STR"
 
-    `Required`: ID of a Cloud DNS managed zone that instance resource records should belong to.
+    `Required`: DNS zone to pull records from.  Must be a fully-qualified domain name (FQDN), ending in ``.``, e.g. ``example.com.``.  If it's a reverse zone, it must be in the form 'A.B.in-addr.arpa.'.
+
+    Note: this is separate from Google's 'managed zone' names.  Google uses custom string names with specific `requirements <https://cloud.google.com/dns/api/v1/managedZones#resource>`_ for storing records. Gordon requires that managed zone names be based on DNS names. For all domains, remove the trailing dot and replace all other dots with dashes.  For reverse records, then use only the two most significant octets, prepended with 'reverse-'.  (E.g. ``foo.bar.com.`` -> ``foo-bar-com`` and ``0.168.192.in-addr.arpa.`` -> ``reverse-168-192.``)
 
 .. option:: metadata_blackklist=[["STR","STR"],["STR","STR"]]
 

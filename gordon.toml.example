@@ -8,7 +8,6 @@ handlers = ["syslog"]
 [gcp]
 project = "my-gcp-project"
 dns_zone = "example.com."
-managed_zone = "example-com"
 
 [gcp.enricher]
 keyfile = "/path/to/keyfiles/compute.json"
@@ -18,6 +17,7 @@ keyfile = "/path/to/keyfiles/pubsub.json"
 topic = "my-dns-changes"
 subscription = "gordon-consumer"
 max_messages = 25
+max_msg_age = 300
 
 [gcp.publisher]
 project = "my-dns-project"

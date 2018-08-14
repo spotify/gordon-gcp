@@ -34,7 +34,8 @@ def consumer_config(fake_keyfile):
         'keyfile': fake_keyfile,
         'project': 'test-example',
         'topic': 'a-topic',
-        'subscription': 'a-subscription'
+        'subscription': 'a-subscription',
+        'max_msg_age': 1000
     }
 
 
@@ -132,6 +133,43 @@ def test_get_event_consumer_config_raises(config_key, exp_msg, consumer_config,
     assert 1 == len(caplog.records)
 
 
+def test_get_event_consumer_max_msg_age_set(consumer_config, auth_client,
+                                            subscriber_client, caplog, emulator,
+                                            metrics):
+    """max_msg_age is correctly set."""
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    plugin = service.get_event_consumer(consumer_config, success_chnl,
+                                        error_chnl, metrics)
+    assert consumer_config['max_msg_age'] == plugin._max_msg_age
+
+
+def test_get_event_consumer_max_msg_age_unset(consumer_config, auth_client,
+                                              subscriber_client, caplog,
+                                              emulator, metrics):
+    """max_msg_age is unset (default)."""
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    consumer_config.pop('max_msg_age')
+    plugin = service.get_event_consumer(consumer_config, success_chnl,
+                                        error_chnl, metrics)
+    assert 300 == plugin._max_msg_age
+
+
+@pytest.mark.parametrize('pw_value', ['not_a_number', 0])
+def test_get_event_consumer_max_msg_age_invalid(consumer_config, auth_client,
+                                                subscriber_client, caplog,
+                                                emulator, metrics, pw_value):
+    """max_msg_age is invalid"""
+    consumer_config['max_msg_age'] = pw_value
+    success_chnl, error_chnl = asyncio.Queue(), asyncio.Queue()
+    with pytest.raises(exceptions.GCPConfigError) as e:
+        service.get_event_consumer(
+            consumer_config, success_chnl, error_chnl, metrics)
+    subscriber_client.create_subscription.assert_not_called()
+    e.match('Invalid configuration:\nInvalid value for max_msg_age \\(discard '
+            'messages older than this many seconds\\).')
+    assert 1 == len(caplog.records)
+
+
 def test_get_event_consumer_raises_topic(consumer_config, auth_client,
                                          subscriber_client, caplog, emulator,
                                          exp_topic, exp_sub, metrics):
@@ -196,7 +234,6 @@ def enricher_config(fake_keyfile):
     return {
         'keyfile': fake_keyfile,
         'dns_zone': 'example.com.',
-        'managed_zone': 'example-com',
         'project': 'gcp-proj-dns',
     }
 
@@ -222,9 +259,6 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
     ('keyfile', 'The path to a Service Account JSON keyfile is required to '
                 'authenticate to the GCE API.'),
     ('dns_zone', 'A dns zone is required to build correct A records.'),
-    ('managed_zone', 'The name of the Google Cloud DNS managed zone is '
-                     'required to correctly delete A records for deleted '
-                     'instances'),
     ('project', 'The GCP project that contains the Google Cloud DNS managed '
                 'zone is required to correctly delete A records for deleted '
                 'instances.')])
@@ -265,7 +299,6 @@ def publisher_config(fake_keyfile):
         'keyfile': fake_keyfile,
         'dns_zone': 'example.com.',
         'project': 'test-example',
-        'managed_zone': 'my-zone',
         'default_ttl': 300,
     }
 
@@ -283,7 +316,7 @@ def publisher_config(fake_keyfile):
 def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
                             publisher_config, auth_client, metrics):
     """Happy path to initialize a GDNSPublisher client."""
-    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.gdns.GDNSClient'
     mocker.patch(patch)
 
     if conf_value:
@@ -301,8 +334,6 @@ def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
                     'to authenticate for Google Cloud DNS.')),
     (('project',), 'The GCP project where Cloud DNS is located is required.'),
     (('dns_zone',), 'A dns zone is required to build correct A records.'),
-    (('managed_zone',), ('A managed zone is required to publish records to '
-                         'Google Cloud DNS.')),
     (('default_ttl',), ('A default TTL in seconds must be set for publishing '
                         'records to Google Cloud DNS.')),
     (('keyfile', 'project'), ('The path to a Service Account JSON keyfile is '
@@ -314,7 +345,7 @@ def test_get_gdns_publisher_raises(conf_keys, exp_msg_snip,
                                    publisher_config, mocker, auth_client,
                                    caplog, metrics):
     """Raise when required config key(s) missing."""
-    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.gdns.GDNSClient'
     mocker.patch(patch)
 
     for conf_key in conf_keys:
@@ -341,7 +372,7 @@ def test_get_gdns_publisher_bad_config(conf_key, bad_value, exp_msg_snip,
                                        publisher_config, mocker, auth_client,
                                        caplog, metrics):
     """Raise when config values are malformed."""
-    patch = 'gordon_gcp.plugins.service.gdns_publisher.http.AIOConnection'
+    patch = 'gordon_gcp.plugins.service.gdns_publisher.gdns.GDNSClient'
     mocker.patch(patch)
 
     publisher_config[conf_key] = bad_value
