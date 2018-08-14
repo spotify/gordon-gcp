@@ -17,6 +17,7 @@
 import asyncio
 import copy
 import logging
+from unittest import mock
 
 import pytest
 
@@ -33,13 +34,13 @@ def echoing_helper_coro(data):
 
 
 @pytest.fixture
-def fake_authority(mocker, monkeypatch, authority_config, auth_client):
+def fake_authority(mocker, monkeypatch, authority_config, auth_client, metrics):
     monkeypatch.setattr(
         'gordon_gcp.plugins.janitor.authority.auth.GAuthClient',
         mocker.Mock(return_value=auth_client))
     rrset_channel = asyncio.Queue()
     fake_authority = authority.GCEAuthority(
-        authority_config, None, rrset_channel)
+        authority_config, metrics, None, rrset_channel)
     fake_authority.session = auth_client._session
     return fake_authority
 
@@ -54,7 +55,8 @@ def get_mock_client(mocker, get_gce_client):
 
 
 @pytest.mark.asyncio
-async def test_builder_creates_proper_authority(mocker, authority_config):
+async def test_builder_creates_proper_authority(
+        mocker, authority_config, metrics):
     gce_client = mocker.MagicMock(name='gce_client')
     crm_client = mocker.MagicMock(name='crm_client')
     auth_client = mocker.MagicMock(name='auth_client')
@@ -66,7 +68,7 @@ async def test_builder_creates_proper_authority(mocker, authority_config):
     rrset_channel = asyncio.Queue()
     kwargs = {'other': 'kwargs'}
     builder = authority.GCEAuthorityBuilder(
-        authority_config, rrset_channel, **kwargs)
+        authority_config, metrics, rrset_channel, **kwargs)
     try:
         gce_authority = builder.build_authority()
     finally:
@@ -98,7 +100,7 @@ async def test_builder_creates_proper_authority(mocker, authority_config):
 @pytest.mark.asyncio
 async def test_run_publishes_msg_to_channel(mocker, authority_config,
                                             get_gce_client, create_mock_coro,
-                                            instance_data):
+                                            instance_data, metrics):
     instances = []
     for i in range(1, 4):
         inst = copy.deepcopy(instance_data)
@@ -117,8 +119,8 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
     gce_client.list_instances = list_instances_coro
 
     rrset_channel = asyncio.Queue()
-    gce_authority = authority.GCEAuthority(authority_config, crm_client,
-                                           gce_client, rrset_channel)
+    gce_authority = authority.GCEAuthority(
+        authority_config, metrics, crm_client, gce_client, rrset_channel)
 
     await gce_authority.run()
 
@@ -140,11 +142,30 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
     # run also calls self.cleanup at the end
     assert (await rrset_channel.get()) is None
 
+    context = {'plugin': 'gceauthority'}
+    gce_authority.metrics._timer_mock.assert_called_once_with(
+        'plugin-runtime', context=context)
+
+    gce_authority.metrics.timer_stub.start_mock.assert_called_once_with()
+    gce_authority.metrics.timer_stub.stop_mock.assert_called_once_with()
+    context = {
+        'plugin': 'gceauthority',
+    }
+    gce_authority.metrics._set_mock.assert_has_calls([mock.call(
+        'projects', 2, context=context)])
+
+    context = {
+        'plugin': 'gceauthority',
+        'zone': authority_config['dns_zone'],
+    }
+    gce_authority.metrics._set_mock.assert_has_calls([mock.call(
+        'rrsets', len(expected_rrsets), context=context)])
+
 
 @pytest.mark.asyncio
 async def test_run_continues_when_404_error_raised(
         mocker, caplog, authority_config, get_gce_client, create_mock_coro,
-        instance_data):
+        instance_data, metrics):
     caplog.set_level(logging.WARN)
 
     instances = [instance_data]
@@ -162,8 +183,8 @@ async def test_run_continues_when_404_error_raised(
     mock_rrset_channel = mocker.Mock()
     rrset_channel_put_mock, rrset_channel_put_coro = create_mock_coro()
     mock_rrset_channel.put = rrset_channel_put_coro
-    gce_authority = authority.GCEAuthority(authority_config, crm_client,
-                                           gce_client, mock_rrset_channel)
+    gce_authority = authority.GCEAuthority(
+        authority_config, metrics, crm_client, gce_client, mock_rrset_channel)
 
     await gce_authority.run()
 
@@ -179,7 +200,7 @@ async def test_run_continues_when_404_error_raised(
 @pytest.mark.asyncio
 async def test_run_fails_when_unexpected_error_raised(
         mocker, authority_config, get_gce_client, create_mock_coro,
-        instance_data, exception_args, exception):
+        instance_data, exception_args, exception, metrics):
     instances = [instance_data]
     active_projects_mock, active_projects_coro = create_mock_coro()
     active_projects_mock.return_value = [{'projectId': 1}, {'projectId': 2}]
@@ -195,8 +216,8 @@ async def test_run_fails_when_unexpected_error_raised(
     mock_rrset_channel = mocker.Mock()
     rrset_channel_put_mock, rrset_channel_put_coro = create_mock_coro()
     mock_rrset_channel.put = rrset_channel_put_coro
-    gce_authority = authority.GCEAuthority(authority_config, crm_client,
-                                           gce_client, mock_rrset_channel)
+    gce_authority = authority.GCEAuthority(
+        authority_config, metrics, crm_client, gce_client, mock_rrset_channel)
 
     with pytest.raises(exception):
         await gce_authority.run()

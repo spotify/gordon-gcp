@@ -29,7 +29,7 @@ from gordon_gcp.plugins import janitor
 ])
 def test_get_gpubsub_publisher(local, timeout, exp_timeout, topic, config,
                                auth_client, emulator, mock_pubsub_client,
-                               monkeypatch):
+                               monkeypatch, metrics):
     """Happy path to initialize a GPubsubPublisher client."""
     changes_chnl = asyncio.Queue()
 
@@ -40,7 +40,7 @@ def test_get_gpubsub_publisher(local, timeout, exp_timeout, topic, config,
         config['cleanup_timeout'] = timeout
 
     config['topic'] = topic
-    client = janitor.get_gpubsub_publisher(config, changes_chnl)
+    client = janitor.get_gpubsub_publisher(config, changes_chnl, metrics)
 
     topic = topic.split('/')[-1]
     exp_topic = f'projects/{config["project"]}/topics/{topic}'
@@ -59,13 +59,13 @@ def test_get_gpubsub_publisher(local, timeout, exp_timeout, topic, config,
 ])
 def test_get_gpubsub_publisher_config_raises(
         config_key, exp_msg, config, auth_client, mock_pubsub_client,
-        caplog, emulator):
+        caplog, emulator, metrics):
     """Raise with improper configuration."""
     changes_chnl = asyncio.Queue()
     config.pop(config_key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        client = janitor.get_gpubsub_publisher(config, changes_chnl)
+        client = janitor.get_gpubsub_publisher(config, changes_chnl, metrics)
         client.publisher.create_topic.assert_not_called()
 
     e.match(exp_msg)
@@ -73,7 +73,7 @@ def test_get_gpubsub_publisher_config_raises(
 
 
 def test_get_gpubsub_publisher_raises(
-        config, auth_client, mock_pubsub_client, caplog, emulator):
+        config, auth_client, mock_pubsub_client, caplog, emulator, metrics):
     """Raise when there's an issue creating a Google Pub/Sub topic."""
     changes_chnl = asyncio.Queue()
     mock_pubsub_client.return_value.create_topic.side_effect = [
@@ -81,7 +81,7 @@ def test_get_gpubsub_publisher_raises(
     ]
 
     with pytest.raises(exceptions.GCPGordonJanitorError) as e:
-        client = janitor.get_gpubsub_publisher(config, changes_chnl)
+        client = janitor.get_gpubsub_publisher(config, changes_chnl, metrics)
 
         client.publisher.create_topic.assert_called_once_with(client.topic)
         e.match(f'Error trying to create topic "{client.topic}"')
@@ -90,14 +90,14 @@ def test_get_gpubsub_publisher_raises(
 
 
 def test_get_gpubsub_publisher_topic_exists(
-        config, auth_client, mock_pubsub_client, emulator):
+        config, auth_client, mock_pubsub_client, emulator, metrics):
     """Do not raise if topic already exists."""
     changes_chnl = asyncio.Queue()
     exp = google_exceptions.AlreadyExists('foo')
     mock_pubsub_client.return_value.create_topic.side_effect = [exp]
 
     short_topic = config['topic']
-    client = janitor.get_gpubsub_publisher(config, changes_chnl)
+    client = janitor.get_gpubsub_publisher(config, changes_chnl, metrics)
 
     exp_topic = f'projects/{config["project"]}/topics/{short_topic}'
     assert 60 == client.cleanup_timeout
@@ -112,7 +112,8 @@ def test_get_gpubsub_publisher_topic_exists(
     (None, 60),
     (30, 30),
 ])
-def test_get_reconciler(timeout, exp_timeout, config, auth_client, monkeypatch):
+def test_get_reconciler(timeout, exp_timeout, config, auth_client, monkeypatch,
+                        metrics):
     """Happy path to initialize a Reconciler client."""
     rrset_chnl = asyncio.Queue()
     changes_chnl = asyncio.Queue()
@@ -120,7 +121,7 @@ def test_get_reconciler(timeout, exp_timeout, config, auth_client, monkeypatch):
     if timeout:
         config['cleanup_timeout'] = timeout
 
-    client = janitor.get_reconciler(config, rrset_chnl, changes_chnl)
+    client = janitor.get_reconciler(config, metrics, rrset_chnl, changes_chnl)
 
     assert exp_timeout == client.cleanup_timeout
     assert client.dns_client is not None
@@ -133,25 +134,25 @@ def test_get_reconciler(timeout, exp_timeout, config, auth_client, monkeypatch):
     ('project', 'The GCP project where Cloud DNS is located is required.')
 ])
 def test_get_reconciler_config_raises(key, error_msg, config, auth_client,
-                                      caplog):
+                                      caplog, metrics):
     """Raise with improper configuration."""
     rrset_chnl = asyncio.Queue()
     changes_chnl = asyncio.Queue()
     config.pop(key)
 
     with pytest.raises(exceptions.GCPConfigError) as e:
-        janitor.get_reconciler(config, rrset_chnl, changes_chnl)
+        janitor.get_reconciler(config, metrics, rrset_chnl, changes_chnl)
 
     e.match(error_msg)
     assert 1 == len(caplog.records)
 
 
 @pytest.mark.asyncio
-async def test_get_authority(authority_config, auth_client):
+async def test_get_authority(authority_config, auth_client, metrics):
     """Test authority client initialization happy path."""
     rrset_channel = asyncio.Queue()
 
-    client = janitor.get_authority(authority_config, rrset_channel)
+    client = janitor.get_authority(authority_config, metrics, rrset_channel)
     assert rrset_channel == client.rrset_channel
     assert client.crm_client is not None
     assert client.gce_client is not None
@@ -165,12 +166,12 @@ async def test_get_authority(authority_config, auth_client):
     ('keyfile', 'The path to a Service Account JSON keyfile is required '),
     ('dns_zone', 'The absolute DNS zone, i.e. "example.com.", is required ')])
 def test_get_authority_config_raises(caplog, config_key, error_msg,
-                                     authority_config, auth_client):
+                                     authority_config, auth_client, metrics):
     """Raise with bad configuration."""
     rrset_channel = asyncio.Queue()
     del authority_config[config_key]
     with pytest.raises(exceptions.GCPConfigError) as e:
-        janitor.get_authority(authority_config, rrset_channel)
+        janitor.get_authority(authority_config, metrics, rrset_channel)
 
     e.match(error_msg)
     assert 1 == len(caplog.records)
