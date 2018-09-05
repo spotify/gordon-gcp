@@ -105,7 +105,7 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
     for i in range(1, 4):
         inst = copy.deepcopy(instance_data)
         inst['name'] = f'host-{i}'
-        inst['networkInterfaces'][0]['accessConfigs'][0]['natIp'] = f'1.1.1.{i}'
+        inst['networkInterfaces'][0]['accessConfigs'][0]['natIP'] = f'1.1.1.{i}'
         instances.append(inst)
 
     active_projects_mock, active_projects_coro = create_mock_coro()
@@ -114,7 +114,9 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
     crm_client.list_all_active_projects = active_projects_coro
 
     list_instances_mock, list_instances_coro = create_mock_coro()
-    list_instances_mock.return_value = instances
+    # duplicate two of the three, which will be deduped by
+    # _dedupe_instances_by_ip()
+    list_instances_mock.side_effect = [instances, instances[0:2]]
     gce_client = get_gce_client(gce.GCEClient)
     gce_client.list_instances = list_instances_coro
 
@@ -124,14 +126,13 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
 
     await gce_authority.run()
 
-    _expected_rrsets = []
+    expected_rrsets = []
     for instance in instances:
         ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
-        _expected_rrsets.append({
+        expected_rrsets.append({
             'name': f"{instance['name']}.{authority_config['dns_zone']}",
             'type': 'A',
             'rrdatas': [ip]})
-    expected_rrsets = _expected_rrsets * 2
     expected_msg = {
         'zone': authority_config['dns_zone'],
         'rrsets': expected_rrsets
@@ -232,3 +233,77 @@ def test_create_msgs_bad_json(caplog, fake_authority):
     results = fake_authority._create_msgs([partial_instance])
     assert [] == results
     assert 1 == len(caplog.records)
+
+
+def _instance_template(name, timestamp, ext_ip):
+    return {
+            'name': name,
+            'creationTimestamp': timestamp,
+            'networkInterfaces': [{
+                'networkIP': '1.2.3.4',
+                'accessConfigs': [{'natIP': ext_ip}]
+            }]
+    }
+
+
+@pytest.fixture
+def dupl_gce_instances():
+    newer = '2018-03-27T10:59:48.682-07:00'
+    older = '2018-03-27T10:58:48.682-07:00'  # newer - 60 sec
+
+    # these pairs have the first one newer
+
+    # 1 and 2 have different timestamps and different ext IPs
+    i1 = _instance_template(
+        'guc3-dupltest-a1', newer, '1.2.1.1'
+    )
+    i2 = _instance_template(
+        'guc3-dupltest-a2', older, '1.2.1.2'
+    )
+
+    # 3 and 4 have different timestamps and the same ext IPs
+    i3 = _instance_template(
+        'guc3-dupltest-a3', newer, '1.2.1.3'
+    )
+    i4 = _instance_template(
+        'guc3-dupltest-a4', older, '1.2.1.3'
+    )
+
+    # these pairs have the second one newer
+
+    # 1 and 2 have different timestamps and different ext IPs
+    j1 = _instance_template(
+        'guc3-dupltest-b1', older, '1.2.2.1'
+    )
+    j2 = _instance_template(
+        'guc3-dupltest-b2', newer, '1.2.2.2'
+    )
+
+    # 3 and 4 have different timestamps and the same ext IPs
+    j3 = _instance_template(
+        'guc3-dupltest-b3', older, '1.2.2.3'
+    )
+    j4 = _instance_template(
+        'guc3-dupltest-b4', newer, '1.2.2.3'
+    )
+
+    return [i1, i2, i3, i4, j1, j2, j3, j4]
+
+
+@pytest.fixture
+def dupl_expected_instances(dupl_gce_instances):
+    return [
+        dupl_gce_instances[0],  # i1
+        dupl_gce_instances[1],  # i2
+        dupl_gce_instances[2],  # i3
+        dupl_gce_instances[4],  # j1
+        dupl_gce_instances[5],  # j2
+        dupl_gce_instances[7],  # j4
+    ]
+
+
+def test__dedupe_instances_by_ip(authority_config, dupl_gce_instances,
+                                 dupl_expected_instances):
+    gce_authority = authority.GCEAuthority(authority_config, None, None, None)
+    assert (dupl_expected_instances ==
+            gce_authority._dedupe_instances_by_ip(dupl_gce_instances))

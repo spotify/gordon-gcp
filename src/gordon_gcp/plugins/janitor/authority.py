@@ -45,6 +45,7 @@ import logging
 
 import aiohttp
 import zope.interface
+from dateutil import parser
 from gordon_janitor import interfaces
 
 from gordon_gcp import exceptions
@@ -177,8 +178,33 @@ class GCEAuthority:
 
         return self._filter_results(all_results)
 
+    def _get_external_ip_from_instance(self, instance):
+        return instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
+
+    def _other_instance_is_newer(self, this_instance, other_instance):
+        this_timestamp = parser.parse(this_instance['creationTimestamp'])
+        other_timestamp = parser.parse(other_instance['creationTimestamp'])
+        return (this_timestamp - other_timestamp).total_seconds() < 0
+
+    def _dedupe_instances_by_ip(self, instances):
+        # This is necessary because Google can return both an instance that is
+        # in the middle of being deleted and one that is being created, with
+        # the same IP.
+        # Note: preserves order.
+        instances_by_ip = {}
+        for instance in instances:
+            ext_ip = self._get_external_ip_from_instance(instance)
+            if ext_ip in instances_by_ip:
+                other_instance = instances_by_ip[ext_ip]
+                if self._other_instance_is_newer(instance, other_instance):
+                    # drop the current instance
+                    continue
+                # otherwise we'll overwrite it below
+            instances_by_ip[ext_ip] = instance
+        return list(instances_by_ip.values())
+
     def _create_instance_rrset(self, instance):
-        ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
+        ip = self._get_external_ip_from_instance(instance)
         fqdn = f"{instance['name']}.{self.config['dns_zone']}"
         return {
             'name': fqdn,
@@ -215,6 +241,7 @@ class GCEAuthority:
         await timer.start()
         projects = await self._get_projects()
         instances = await self._get_instances(projects)
+        instances = self._dedupe_instances_by_ip(instances)
 
         for rrset_msg in self._create_msgs(instances):
             zone = rrset_msg['zone']
