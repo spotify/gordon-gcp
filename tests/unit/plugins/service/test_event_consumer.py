@@ -51,13 +51,19 @@ def raw_msg_data(creation_audit_log_data):
 
 
 @pytest.fixture
-def pubsub_msg(mocker, raw_msg_data):
+def publish_time():
+    # don't use in pubsub_msg because other things are assuming it's current
+    return datetime.datetime(
+        2018, 1, 1, 11, 30, 0, tzinfo=datetime.timezone.utc)
+
+
+@pytest.fixture
+def pubsub_msg(mocker, raw_msg_data, publish_time):
     mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
     pubsub_msg = mocker.MagicMock(pubsub_v1.subscriber.message.Message)
     pubsub_msg.message_id = 1234
     pubsub_msg.data = bytes(json.dumps(raw_msg_data), encoding='utf-8')
-    # need a non-TZ-aware object in UTC
-    pubsub_msg.publish_time = datetime.datetime.utcnow()
+    pubsub_msg.publish_time = datetime.datetime.now(datetime.timezone.utc)
     return pubsub_msg
 
 
@@ -363,12 +369,13 @@ async def test_handle_pubsub_msg_invalid(mocker, monkeypatch, consumer, caplog,
 
 @pytest.mark.asyncio
 async def test_handle_pubsub_msg_old(mocker, monkeypatch, consumer,
-                                     raw_msg_data, creation_audit_log_data,
+                                     publish_time, raw_msg_data,
+                                     creation_audit_log_data,
                                      caplog, pubsub_msg, mock_get_and_validate,
                                      mock_create_gevent_msg):
     """Too-old message."""
-    mocker.patch(DATETIME_PATCH, conftest.MockDatetime)
-    pubsub_msg.publish_time -= datetime.timedelta(
+    mocker.patch('datetime.datetime.now', lambda tz: publish_time)
+    pubsub_msg.publish_time = publish_time - datetime.timedelta(
         seconds=(consumer._max_msg_age + 1))
     context = {
         'msg_id': pubsub_msg.message_id,
