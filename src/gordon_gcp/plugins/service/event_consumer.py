@@ -313,8 +313,8 @@ class GPSEventConsumer:
         msg_logger.info('Received new message.')
 
         msg_datetime = pubsub_msg.publish_time
-        # need a non-TZ-aware object in UTC
-        cur_datetime = datetime.datetime.utcnow()
+        # need a TZ-aware object in UTC
+        cur_datetime = datetime.datetime.now(datetime.timezone.utc)
         msg_age = (cur_datetime - msg_datetime).total_seconds()
         if msg_age > self._max_msg_age:
             msg_logger.warn(f'Message is too old ({msg_age} seconds), '
