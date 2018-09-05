@@ -19,6 +19,7 @@ import concurrent.futures
 import datetime
 import json
 import logging
+from unittest import mock
 
 import pytest
 
@@ -27,19 +28,11 @@ from tests.unit import conftest
 
 
 @pytest.fixture
-def kwargs(config, mock_pubsub_client):
-    return {
-        'config': {
-            'topic': f'projects/{config["project"]}/topics/{config["topic"]}'
-        },
-        'publisher': mock_pubsub_client,
-        'changes_channel': asyncio.Queue()
-    }
-
-
-@pytest.fixture
-def gpubsub_publisher_inst(monkeypatch, kwargs):
-    return gpubsub_publisher.GPubsubPublisher(**kwargs)
+def gpubsub_publisher_inst(config, mock_pubsub_client, metrics):
+    config['topic'] = f'projects/{config["project"]}/topics/{config["topic"]}'
+    client = gpubsub_publisher.GPubsubPublisher(
+        config, metrics, mock_pubsub_client, asyncio.Queue())
+    return client
 
 
 @pytest.mark.parametrize('side_effect', [
@@ -130,11 +123,23 @@ async def test_run(raises, gpubsub_publisher_inst,
     await gpubsub_publisher_inst.run()
 
     gpubsub_publisher_inst.publisher.publish.assert_called_once()
+    context = {'plugin': 'gpubsub-publisher'}
+    gpubsub_publisher_inst.metrics._timer_mock.assert_called_once_with(
+        'plugin-runtime', context=context)
+    start_mock = gpubsub_publisher_inst.metrics.timer_stub.start_mock
+    start_mock.assert_called_once_with()
+
     assert 0 == len(gpubsub_publisher_inst._messages)
 
     assert 2 == len(caplog.records)
     assert 'Finished sending' in str(caplog.records.pop())
+    gpubsub_publisher_inst.metrics._incr_mock.assert_has_calls(
+            [mock.call('change-msg-recv', value=1, context=context)])
     if raises:
         assert 'Exception' in str(caplog.records.pop())
     else:
+        stop_mock = gpubsub_publisher_inst.metrics.timer_stub.stop_mock
+        stop_mock.assert_called_once_with()
         assert 'Message published' in str(caplog.records.pop())
+        gpubsub_publisher_inst.metrics._incr_mock.assert_has_calls(
+            [mock.call('change-msg-publish', value=1, context=context)])

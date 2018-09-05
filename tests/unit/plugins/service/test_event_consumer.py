@@ -378,8 +378,8 @@ async def test_handle_pubsub_msg_old(mocker, monkeypatch, consumer,
     await consumer._handle_pubsub_msg(pubsub_msg)
 
     assert 2 == len(caplog.records)
-    consumer.metrics.incr_mock.assert_called_once_with(
-        'msg-too-old', context=context)
+    consumer.metrics._incr_mock.assert_called_once_with(
+        'msg-too-old', value=1, context=context)
     pubsub_msg.ack.assert_called_once_with()
     mock_get_and_validate.assert_not_called()
     mock_create_gevent_msg.assert_not_called()
