@@ -196,6 +196,9 @@ class GCEAuthority:
             ext_ip = self._get_external_ip_from_instance(instance)
             if ext_ip in instances_by_ip:
                 other_instance = instances_by_ip[ext_ip]
+                msg = (f"Deleting older instance due to conflict; instance1 = "
+                       f"'{instance}', instance2 = '{other_instance}'.")
+                logging.info(msg)
                 if self._other_instance_is_newer(instance, other_instance):
                     # drop the current instance
                     continue

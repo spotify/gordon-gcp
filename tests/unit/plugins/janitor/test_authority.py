@@ -303,7 +303,9 @@ def dupl_expected_instances(dupl_gce_instances):
 
 
 def test__dedupe_instances_by_ip(authority_config, dupl_gce_instances,
-                                 dupl_expected_instances):
+                                 dupl_expected_instances, caplog):
+    caplog.set_level(logging.INFO)
     gce_authority = authority.GCEAuthority(authority_config, None, None, None)
     assert (dupl_expected_instances ==
             gce_authority._dedupe_instances_by_ip(dupl_gce_instances))
+    assert 2 == len(caplog.records)
