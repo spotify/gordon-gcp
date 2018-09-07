@@ -1,6 +1,22 @@
 Changelog
 =========
 
+0.0.1.dev20 (2018-09-07)
+------------------------
+
+Fixed
+~~~~~
+* Fix bug in date comparison in drop-old-message functionality.
+
+Added
+~~~~~
+* Add metrics to the janitor.
+
+Changed
+~~~~~~~
+* Speed up the reconciler.
+
+
 0.0.1.dev19 (2018-08-14)
 ------------------------
 
