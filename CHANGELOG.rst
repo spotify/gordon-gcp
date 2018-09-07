@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev21 (2018-09-07)
+------------------------
+
+Changed
+~~~~~~~
+* Bump upstream Gordon package requirements.
+
+
 0.0.1.dev20 (2018-09-07)
 ------------------------
 
