@@ -31,7 +31,7 @@ __all__ = (
 )
 
 
-def get_gpubsub_publisher(config, changes_channel, **kw):
+def get_gpubsub_publisher(config, metrics, changes_channel, **kw):
     """Get a GPubsubPublisher client.
 
     A factory function that validates configuration, creates an auth
@@ -40,6 +40,7 @@ def get_gpubsub_publisher(config, changes_channel, **kw):
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         changes_channel (asyncio.Queue): Queue to publish message to
             make corrections to Cloud DNS.
         kw (dict): Additional keyword arguments to pass to the
@@ -48,11 +49,11 @@ def get_gpubsub_publisher(config, changes_channel, **kw):
         A :class:`GPubsubPublisher` instance.
     """
     builder = gpubsub_publisher.GPubsubPublisherBuilder(
-        config, changes_channel, **kw)
+        config, metrics, changes_channel, **kw)
     return builder.build_publisher()
 
 
-def get_reconciler(config, rrset_channel, changes_channel, **kw):
+def get_reconciler(config, metrics, rrset_channel, changes_channel, **kw):
     """Get a GDNSReconciler client.
 
     A factory function that validates configuration, creates an auth
@@ -61,6 +62,7 @@ def get_reconciler(config, rrset_channel, changes_channel, **kw):
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         rrset_channel (asyncio.Queue): Queue from which to consume
             record set messages to validate.
         changes_channel (asyncio.Queue): Queue to publish message to
@@ -71,11 +73,11 @@ def get_reconciler(config, rrset_channel, changes_channel, **kw):
         A :class:`GDNSReconciler` instance.
     """
     builder = reconciler.GDNSReconcilerBuilder(
-        config, rrset_channel, changes_channel, **kw)
+        config, metrics, rrset_channel, changes_channel, **kw)
     return builder.build_reconciler()
 
 
-def get_authority(config, rrset_channel, **kwargs):
+def get_authority(config, metrics, rrset_channel, **kwargs):
     """Get a GCEAuthority client.
 
     A factory function that validates configuration and creates a
@@ -83,6 +85,7 @@ def get_authority(config, rrset_channel, **kwargs):
 
     Args:
         config (dict): GCEAuthority related configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         rrset_channel (asyncio.Queue): Queue used for sending messages
             to the reconciler plugin.
         kw (dict): Additional keyword arguments to pass to the
@@ -90,5 +93,6 @@ def get_authority(config, rrset_channel, **kwargs):
     Returns:
         A :class:`GCEAuthority` instance.
     """
-    builder = authority.GCEAuthorityBuilder(config, rrset_channel, **kwargs)
+    builder = authority.GCEAuthorityBuilder(
+        config, metrics, rrset_channel, **kwargs)
     return builder.build_authority()

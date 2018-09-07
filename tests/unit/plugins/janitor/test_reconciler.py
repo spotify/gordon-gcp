@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import asyncio
+from unittest import mock
 
 import aiohttp
 import pytest
@@ -85,9 +86,10 @@ def test_reconciler_default(timeout, exp_timeout, config, dns_client):
 
 
 @pytest.fixture
-async def recon_client(config, dns_client):
+async def recon_client(config, dns_client, metrics):
     rch, chch = asyncio.Queue(), asyncio.Queue()
-    recon_client = reconciler.GDNSReconciler(config, dns_client, rch, chch)
+    recon_client = reconciler.GDNSReconciler(
+        config, metrics, dns_client, rch, chch)
     yield recon_client
     while not chch.empty():
         await chch.get()
@@ -259,25 +261,25 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
     assert 1 == mock_get_records_for_zone_called
 
 
-args = 'msg,exp_log_records,exp_mock_calls,qsize'
+args = 'msg,exp_log_records,exp_mock_calls,qsize,additions,deletions'
 
 params = [
     # happy path
-    [{'zone': 'example.net.', 'rrsets': []}, 4, 1, 2],
+    [{'zone': 'example.net.', 'rrsets': []}, 4, 1, 2, 0, 1],
     # full happy path - ugly but can't import conftest.py from here
-    [{'zone': 'example.net.', 'rrsets': 'FAKE'}, 7, 1, 5],
+    [{'zone': 'example.net.', 'rrsets': 'FAKE'}, 7, 1, 5, 3, 1],
     # no rrsets key
-    [{'zone': 'example.net.'}, 3, 0, 1],
+    [{'zone': 'example.net.'}, 3, 0, 1, None, None],
     # no zone key
-    [{'rrsets': []}, 3, 0, 1],
+    [{'rrsets': []}, 3, 0, 1, None, None],
 ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(args, params)
-async def test_run(msg, exp_log_records, exp_mock_calls, qsize,
-                   fake_response_data, extra_rrset, caplog, recon_client,
-                   monkeypatch):
+async def test_run(msg, exp_log_records, exp_mock_calls, qsize, additions,
+                   deletions, fake_response_data, extra_rrset, caplog,
+                   recon_client, monkeypatch):
     """Start reconciler & continue if certain errors are raised."""
     mock_validate_rrsets_by_zone_called = 0
 
@@ -302,3 +304,15 @@ async def test_run(msg, exp_log_records, exp_mock_calls, qsize,
     assert qsize == recon_client.changes_channel.qsize()
     assert exp_log_records == len(caplog.records)
     assert exp_mock_calls == mock_validate_rrsets_by_zone_called
+    context = {'plugin': 'reconciler'}
+    recon_client.metrics._timer_mock.assert_called_once_with(
+        'plugin-runtime', context=context)
+    recon_client.metrics.timer_stub.start_mock.assert_called_once_with()
+    recon_client.metrics.timer_stub.stop_mock.assert_called_once_with()
+    if additions or deletions:
+        recon_client.metrics._set_mock.assert_has_calls(
+            [mock.call(
+                'additions', additions, context=context)])
+        recon_client.metrics._set_mock.assert_has_calls(
+            [mock.call(
+                'deletions', deletions, context=context)])

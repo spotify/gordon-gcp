@@ -8,6 +8,6 @@ google-auth==1.3.0
 # https://github.com/GoogleCloudPlatform/google-cloud-python/issues/5598
 git+git://github.com/GoogleCloudPlatform/google-cloud-python@861d51a20bddafdce841fc9298caa9bbdf03fa50#egg=google-cloud-pubsub&subdirectory=pubsub
 gordon-dns==0.0.1.dev6
-gordon-janitor==0.0.1.dev4
+gordon-janitor==0.0.1.dev5
 jsonschema==2.6.0
 zope.interface==4.4.3

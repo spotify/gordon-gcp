@@ -79,11 +79,13 @@ class GPubsubPublisherBuilder:
 
     Args:
         config (dict): Google Cloud Pub/Sub-related configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         changes_channel (asyncio.Queue): queue to publish message to
             make corrections to Cloud DNS.
     """
-    def __init__(self, config, changes_channel, **kwargs):
+    def __init__(self, config, metrics, changes_channel, **kwargs):
         self.config = config
+        self.metrics = metrics
         self.changes_channel = changes_channel
         self.kwargs = kwargs
 
@@ -149,7 +151,8 @@ class GPubsubPublisherBuilder:
         auth_client = self._init_auth()
         pubsub_client = self._init_client(auth_client)
         return GPubsubPublisher(
-            self.config, pubsub_client, self.changes_channel, **self.kwargs)
+            self.config, self.metrics, pubsub_client, self.changes_channel,
+            **self.kwargs)
 
 
 @zope.interface.implementer(interfaces.IPublisher)
@@ -161,12 +164,14 @@ class GPubsubPublisher:
             'projects/test-example/topics/a-topic'.
         publisher (google.cloud.pubsub_v1.publisher.client.Client):
             client to interface with Google Pub/Sub API.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         changes_channel (asyncio.Queue): queue to publish message to
             make corrections to Cloud DNS.
     """
 
-    def __init__(self, config, publisher, changes_channel=None, **kw):
+    def __init__(self, config, metrics, publisher, changes_channel=None, **kw):
         self.topic = config['topic']
+        self.metrics = metrics
         self.publisher = publisher
         self.changes_channel = changes_channel
         self.cleanup_timeout = config.get('cleanup_timeout', 60)
@@ -201,7 +206,6 @@ class GPubsubPublisher:
             for task in tasks_to_clear:
                 task.cancel()
 
-        # TODO (lynn): add metrics.flush call here once aioshumway is released
         msg = ('Finished sending reconciliation messages to Google Pub/Sub.')
         logging.info(msg)
 
@@ -224,11 +228,7 @@ class GPubsubPublisher:
         message['timestamp'] = datetime.datetime.utcnow().isoformat()
         bytes_message = bytes(json.dumps(message), encoding='utf-8')
         future = self.publisher.publish(self.topic, bytes_message)
-
-        # collect to make sure everything's cleaned up once done
         self._messages.add(future)
-        # TODO (lynn): add metrics.incr/emit call here once aioshumway
-        #              is released
         future.add_done_callback(
             functools.partial(self._message_publish_callback, message))
 
@@ -238,16 +238,21 @@ class GPubsubPublisher:
         Once ``None`` is received from the channel, finish processing
         records and clean up any outstanding tasks.
         """
+        context = {'plugin': 'gpubsub-publisher'}
+        timer = self.metrics.timer('plugin-runtime', context=context)
+        await timer.start()
         while True:
             change_message = await self.changes_channel.get()
             if change_message is None:
                 break
-            # TODO (lynn): emit metric of message received once
-            #              aioshumway is released
+            await self.metrics.incr('change-msg-recv', context=context)
             try:
                 await self.publish(change_message)
+                await self.metrics.incr(
+                    'change-msg-publish', context=context)
             except Exception as e:  # todo
                 logging.error('Exception while trying to publish message to '
                               f' pubsub: {e}')
 
         await self.cleanup()
+        await timer.stop()

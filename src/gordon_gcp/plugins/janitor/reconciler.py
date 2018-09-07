@@ -74,13 +74,16 @@ class GDNSReconcilerBuilder:
 
     Args:
         config (dict): Google Cloud DNS-related configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         rrset_channel (asyncio.Queue): queue from which to consume
             record set messages to validate.
         changes_channel (asyncio.Queue): queue to publish message to
             make corrections to Cloud DNS.
     """
-    def __init__(self, config, rrset_channel, changes_channel, **kwargs):
+    def __init__(self, config, metrics, rrset_channel, changes_channel,
+                 **kwargs):
         self.config = config
+        self.metrics = metrics
         self.rrset_channel = rrset_channel
         self.changes_channel = changes_channel
         self.kwargs = kwargs
@@ -116,8 +119,8 @@ class GDNSReconcilerBuilder:
         auth_client = self._init_auth()
         dns_client = self._init_client(auth_client)
         return GDNSReconciler(
-            self.config, dns_client, self.rrset_channel, self.changes_channel,
-            **self.kwargs)
+            self.config, self.metrics, dns_client, self.rrset_channel,
+            self.changes_channel, **self.kwargs)
 
 
 @zope.interface.implementer(interfaces.IReconciler)
@@ -137,6 +140,7 @@ class GDNSReconciler:
 
     Args:
         config (dict): Google Cloud DNS-related configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         dns_client (.GDNSClient): Client to interact with Google Cloud
             DNS API.
         rrset_channel (asyncio.Queue): Queue from which to consume
@@ -147,12 +151,13 @@ class GDNSReconciler:
 
     _ASYNC_METHODS = ['publish_change_messages', 'validate_rrsets_by_zone']
 
-    def __init__(self, config, dns_client, rrset_channel=None,
+    def __init__(self, config, metrics, dns_client, rrset_channel=None,
                  changes_channel=None, **kw):
+        self.metrics = metrics
+        self.dns_client = dns_client
         self.rrset_channel = rrset_channel
         self.changes_channel = changes_channel
         self.cleanup_timeout = config.get('cleanup_timeout', 60)
-        self.dns_client = dns_client
 
     async def cleanup(self):
         """Clean up & notify :obj:`changes_channel` of no more messages.
@@ -190,7 +195,6 @@ class GDNSReconciler:
                 task.cancel()
 
         await self.changes_channel.put(None)
-        # TODO (lynn): add metrics.flush call here once aioshumway is released
         await self.dns_client._session.close()
 
         msg = ('Reconciliation of desired records against actual records in '
@@ -214,8 +218,6 @@ class GDNSReconciler:
                 'resourceRecords': attr.asdict(rrset),
                 'action': action
             }
-            # TODO (lynn): add metrics.incr call here once aioshumway is
-            #              released
             logging.debug(f'Creating the following change message: {msg}')
             await self.changes_channel.put(msg)
 
@@ -282,13 +284,22 @@ class GDNSReconciler:
         Returns:
             tuple[list[rrset], list[rrset]]: The missing and extra rrset lists.
         """
-        desired_rrsets = gdns.GDNSClient.get_rrsets_as_objects(rrsets)
+        desired_rrsets = {}
+        for rrset in gdns.GDNSClient.get_rrsets_as_objects(rrsets):
+            # GDNSClient's repr is in a fixed order and should be correctly
+            # comparable between rrsets.  (A string representation is the safest
+            # way to turn an rrset into something hashable, since the rrset
+            # contains a list.)
+            desired_rrsets[repr(rrset)] = rrset
 
-        actual_rrsets = gdns.GDNSClient.get_rrsets_as_objects(
-            await self.dns_client.get_records_for_zone(zone))
+        actual_rrsets = {}
+        for rrset in gdns.GDNSClient.get_rrsets_as_objects(
+                await self.dns_client.get_records_for_zone(zone)):
+            actual_rrsets[repr(rrset)] = rrset
 
         missing_rrsets = [
-            rs for rs in desired_rrsets if rs not in actual_rrsets
+            rrset for rrset_repr, rrset in desired_rrsets.items()
+            if rrset_repr not in actual_rrsets
         ]
         # don't try to add root SOA/NS records
         missing_rrsets = self._remove_soa_and_root_ns(zone, missing_rrsets)
@@ -308,7 +319,8 @@ class GDNSReconciler:
             extra_rrsets = []
         else:
             extra_rrsets_raw = [
-                rs for rs in actual_rrsets if rs not in desired_rrsets
+                rrset for rrset_repr, rrset in actual_rrsets.items()
+                if rrset_repr not in desired_rrsets
             ]
             # don't try to remove root SOA/NS records
             extra_rrsets_raw = self._remove_soa_and_root_ns(
@@ -322,7 +334,6 @@ class GDNSReconciler:
                 if (rrset.name, rrset.type) not in missing_keys:
                     extra_rrsets.append(rrset)
 
-            # TODO: This should eventually also emit an actual metric.
             msg = (f'[{zone}] Processed {len(actual_rrsets)} rrset messages '
                    f'and found {len(extra_rrsets)} extra rrsets.')
             logging.info(msg)
@@ -337,6 +348,10 @@ class GDNSReconciler:
         is received from the channel, emits a final ``None`` message to the
         :obj:`changes_channel`.
         """
+        plugin = 'reconciler'
+        context = {'plugin': plugin}
+        timer = self.metrics.timer('plugin-runtime', context=context)
+        await timer.start()
         while True:
             desired_rrset = await self.rrset_channel.get()
             if desired_rrset is None:
@@ -345,6 +360,13 @@ class GDNSReconciler:
                 zone, raw_rrsets = self._parse_rrset_message(desired_rrset)
                 missing_rrsets, extra_rrsets = (
                     await self.validate_rrsets_by_zone(zone, raw_rrsets))
+                await self.metrics.set(
+                    'additions',
+                    len(missing_rrsets), context=context)
+                await self.metrics.set(
+                    'deletions',
+                    len(extra_rrsets), context=context)
+
                 await self.publish_change_messages(
                     missing_rrsets, action='additions')
                 await self.publish_change_messages(
@@ -354,3 +376,4 @@ class GDNSReconciler:
                 logging.error(msg, exc_info=e)
 
         await self.cleanup()
+        await timer.stop()

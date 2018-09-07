@@ -61,11 +61,13 @@ class GCEAuthorityBuilder:
 
     Args:
         config (dict): plugin-specific configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         rrset_channel (asyncio.Queue): channel to send resource record messages
             to.
     """
-    def __init__(self, config, rrset_channel, **kwargs):
+    def __init__(self, config, metrics, rrset_channel, **kwargs):
         self.config = config
+        self.metrics = metrics
         self.rrset_channel = rrset_channel
         self.kwargs = kwargs
         self.session = None
@@ -107,7 +109,7 @@ class GCEAuthorityBuilder:
         crm_client = self._get_crm_client(keyfile_path, scopes)
         gce_client = self._get_gce_client(keyfile_path, scopes)
 
-        return GCEAuthority(self.config, crm_client, gce_client,
+        return GCEAuthority(self.config, self.metrics, crm_client, gce_client,
                             self.rrset_channel, **self.kwargs)
 
 
@@ -117,6 +119,7 @@ class GCEAuthority:
 
     Args:
         config (dict): plugin-specific configuration.
+        metrics (obj): :interface:`IMetricRelay` implementation.
         crm_client (.GCRMClient): client used to fetch GCE projects.
         gce_client (.GCEClient): client used to fetch instances for a project.
         rrset_channel (asyncio.Queue): channel to send resource record messages
@@ -125,9 +128,10 @@ class GCEAuthority:
 
     PROJECT_SKIP_RESP_CODES = {403, 404, 410}
 
-    def __init__(self, config, crm_client, gce_client, rrset_channel=None,
-                 **kwargs):
+    def __init__(self, config, metrics, crm_client, gce_client,
+                 rrset_channel=None, **kwargs):
         self.config = config
+        self.metrics = metrics
         self.crm_client = crm_client
         self.gce_client = gce_client
         self.rrset_channel = rrset_channel
@@ -139,9 +143,11 @@ class GCEAuthority:
     async def _get_projects(self):
         projects = await self._get_active_project_ids()
         project_blacklist = set(self.config.get('project_blacklist', []))
-        # TODO: emit a metric for all projects and a metric for
-        # project - blacklist.
-        return sorted(projects - project_blacklist)
+        sorted_projects = sorted(projects - project_blacklist)
+        context = {'plugin': 'gceauthority'}
+        await self.metrics.set(
+            'projects', len(sorted_projects), context=context)
+        return sorted_projects
 
     def _filter_results(self, results):
         successful_results = []
@@ -202,18 +208,28 @@ class GCEAuthority:
     async def run(self):
         """Batch instance data and send it to the :obj:`self.rrset_channel`.
         """
+        plugin = 'gceauthority'
+        timer_context = {'plugin': plugin}
+        timer = self.metrics.timer(
+            'plugin-runtime', context=timer_context)
+        await timer.start()
         projects = await self._get_projects()
         instances = await self._get_instances(projects)
 
         for rrset_msg in self._create_msgs(instances):
-            # TODO: emit an actual metric
             zone = rrset_msg['zone']
             rrsets = rrset_msg['rrsets']
-            msg = f'[{zone}] Found {len(rrsets)} rrsets for zone in GCE.'
+            total_rrsets = len(rrsets)
+            msg = f'[{zone}] Found {total_rrsets} rrsets for zone in GCE.'
             logging.info(msg)
+            context = {'plugin': plugin,
+                       'zone': zone}
+            await self.metrics.set('rrsets',
+                                   total_rrsets, context=context)
             await self.rrset_channel.put(rrset_msg)
 
         await self.cleanup()
+        await timer.stop()
 
     async def cleanup(self):
         """Clean up after a run."""

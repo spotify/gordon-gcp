@@ -282,20 +282,38 @@ def emulator(monkeypatch):
 
 
 @pytest.fixture
-def metrics(mocker, monkeypatch):
-    incr = mocker.Mock()
-    set_ = mocker.Mock()
+def metrics(mocker):
+    return MetricRelayStub(mocker, config={})
 
-    async def incr_func(*args, **kwargs):
-        incr(*args, **kwargs)
 
-    async def set_func(*args, **kwargs):
-        set_(*args, **kwargs)
+class MetricRelayStub:
+    def __init__(self, mocker, config):
+        self.config = config
+        self._incr_mock = mocker.Mock()
+        self._set_mock = mocker.Mock()
+        self._timer_mock = mocker.Mock()
+        self.timer_stub = None
+        self._mocker = mocker
 
-    metrics = mocker.Mock()
+    async def incr(self, metric_name, value=1, context=None, **kwargs):
+        self._incr_mock(metric_name, value=value, context=context, **kwargs)
 
-    monkeypatch.setattr(metrics, 'incr_mock', incr)
-    monkeypatch.setattr(metrics, 'set_mock', set_)
-    monkeypatch.setattr(metrics, 'incr', incr_func)
-    monkeypatch.setattr(metrics, 'set', set_func)
-    return metrics
+    def timer(self, metric_name, context=None, **kwargs):
+        self._timer_mock(metric_name, context=context, **kwargs)
+        self.timer_stub = TimerStub(self._mocker)
+        return self.timer_stub
+
+    async def set(self, metric_name, value, context=None, **kwargs):
+        self._set_mock(metric_name, value, context=context, **kwargs)
+
+
+class TimerStub:
+    def __init__(self, mocker):
+        self.start_mock = mocker.Mock()
+        self.stop_mock = mocker.Mock()
+
+    async def start(self, *args, **kwargs):
+        self.start_mock(*args, **kwargs)
+
+    async def stop(self, *args, **kwargs):
+        self.stop_mock(*args, **kwargs)

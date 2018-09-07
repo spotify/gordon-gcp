@@ -175,7 +175,7 @@ class GDNSClient(http.AIOConnection):
             if not next_page_token:
                 break
 
-        logging.info(f'Found {len(records)} for zone "{dns_zone}".')
+        logging.info(f'Found {len(records)} rrsets for zone "{dns_zone}".')
         return records
 
     async def is_change_done(self, zone, change_id):
