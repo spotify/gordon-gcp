@@ -284,13 +284,22 @@ class GDNSReconciler:
         Returns:
             tuple[list[rrset], list[rrset]]: The missing and extra rrset lists.
         """
-        desired_rrsets = gdns.GDNSClient.get_rrsets_as_objects(rrsets)
+        desired_rrsets = {}
+        for rrset in gdns.GDNSClient.get_rrsets_as_objects(rrsets):
+            # GDNSClient's repr is in a fixed order and should be correctly
+            # comparable between rrsets.  (A string representation is the safest
+            # way to turn an rrset into something hashable, since the rrset
+            # contains a list.)
+            desired_rrsets[repr(rrset)] = rrset
 
-        actual_rrsets = gdns.GDNSClient.get_rrsets_as_objects(
-            await self.dns_client.get_records_for_zone(zone))
+        actual_rrsets = {}
+        for rrset in gdns.GDNSClient.get_rrsets_as_objects(
+                await self.dns_client.get_records_for_zone(zone)):
+            actual_rrsets[repr(rrset)] = rrset
 
         missing_rrsets = [
-            rs for rs in desired_rrsets if rs not in actual_rrsets
+            rrset for rrset_repr, rrset in desired_rrsets.items()
+            if rrset_repr not in actual_rrsets
         ]
         # don't try to add root SOA/NS records
         missing_rrsets = self._remove_soa_and_root_ns(zone, missing_rrsets)
@@ -310,7 +319,8 @@ class GDNSReconciler:
             extra_rrsets = []
         else:
             extra_rrsets_raw = [
-                rs for rs in actual_rrsets if rs not in desired_rrsets
+                rrset for rrset_repr, rrset in actual_rrsets.items()
+                if rrset_repr not in desired_rrsets
             ]
             # don't try to remove root SOA/NS records
             extra_rrsets_raw = self._remove_soa_and_root_ns(
