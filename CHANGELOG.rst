@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev22 (2018-09-10)
+------------------------
+
+Fixed
+~~~~~
+* Fix incorrect function call in GDNS publisher.
+
+
 0.0.1.dev21 (2018-09-07)
 ------------------------
 
