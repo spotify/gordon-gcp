@@ -216,7 +216,7 @@ class GDNSPublisher:
         end = start + timeout
 
         while datetime.datetime.now() < end:
-            if await self.dns_client.is_change_done(zone):
+            if await self.dns_client.is_change_done(zone, change_id):
                 return True
             await asyncio.sleep(1)
 
