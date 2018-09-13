@@ -142,42 +142,51 @@ class AIOConnection:
             method=method.upper(),
             url=url,
             kwargs=req_kwargs))
-        async with self._session.request(
-                method, url, **req_kwargs) as resp:
-            log_kw = {
-                'request_id': request_id,
-                'method': method.upper(),
-                'url': resp.url,
-                'status': resp.status,
-                'reason': resp.reason
-            }
-            logging.debug(_utils.RESP_LOG_FMT.format(**log_kw))
+        try:
+            async with self._session.request(method, url, **req_kwargs) as resp:
+                log_kw = {
+                    'request_id': request_id,
+                    'method': method.upper(),
+                    'url': resp.url,
+                    'status': resp.status,
+                    'reason': resp.reason
+                }
+                logging.debug(_utils.RESP_LOG_FMT.format(**log_kw))
 
-            if resp.status in REFRESH_STATUS_CODES:
-                logging.warning(f'[{request_id}] HTTP Status Code {resp.status}'
-                                f' returned requesting {resp.url}: '
-                                f'{resp.reason}')
-                if token_refresh_attempts:
-                    logging.info(f'[{request_id}] Attempting request to '
-                                 f'{resp.url} again.')
-                    return await self.request(
-                        method, url,
-                        token_refresh_attempts=token_refresh_attempts,
-                        request_id=request_id,
-                        **req_kwargs)
+                if resp.status in REFRESH_STATUS_CODES:
+                    logging.warning(
+                        f'[{request_id}] HTTP Status Code {resp.status}'
+                        f' returned requesting {resp.url}: {resp.reason}')
+                    if token_refresh_attempts:
+                        logging.info(
+                            f'[{request_id}] Attempting request to {resp.url} '
+                            'again.')
+                        return await self.request(
+                            method, url,
+                            token_refresh_attempts=token_refresh_attempts,
+                            request_id=request_id,
+                            **req_kwargs)
 
-                logging.warning(f'[{request_id}] Max attempts refreshing auth '
-                                f'token exhausted while requesting {resp.url}')
+                    logging.warning(
+                        f'[{request_id}] Max attempts refreshing auth token '
+                        f'exhausted while requesting {resp.url}')
 
-            # avoid leaky abstractions and wrap http errors with our own
-            try:
                 resp.raise_for_status()
-            except aiohttp.ClientResponseError as e:
-                msg = f'[{request_id}] Issue connecting to {resp.url}: {e}'
-                logging.error(msg, exc_info=e)
-                raise exceptions.GCPHTTPResponseError(msg, resp.status)
 
-            return await resp.text()
+                return await resp.text()
+        except aiohttp.ClientResponseError as e:
+            # bad HTTP status; avoid leaky abstractions and wrap HTTP errors
+            # with our own
+            msg = f'[{request_id}] HTTP error response from {resp.url}: {e}'
+            logging.error(msg, exc_info=e)
+            raise exceptions.GCPHTTPResponseError(msg, resp.status)
+        except exceptions.GCPHTTPResponseError as e:
+            # from recursive call
+            raise e
+        except Exception as e:
+            msg = f'[{request_id}] Request call failed: {e}'
+            logging.error(msg, exc_info=e)
+            raise exceptions.GCPHTTPError(msg)
 
     async def get_json(self, url, json_callback=None, **kwargs):
         """Get a URL and return its JSON response.

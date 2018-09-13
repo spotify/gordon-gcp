@@ -179,7 +179,7 @@ async def test_request_max_request_attempts_reached(
         with pytest.raises(exceptions.GCPHTTPResponseError) as e:
             await client.request('get', conftest.API_URL)
 
-        e.match('Issue connecting to https://example.com/v1/foo_endpoint:')
+        e.match('HTTP error response from https://example.com/v1/foo_endpoint:')
 
     assert 2 == mock_refresh_token_called
     assert 9 == len(caplog.records)
@@ -243,6 +243,37 @@ async def test_request_with_valid_token(
     assert 0 == mock_refresh_token_called
     assert resp == resp_text
     assert 2 == len(caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_request_with_other_exception(client, mocker, monkeypatch,
+                                            caplog):
+    """Correct exception is raised when the aiohttp request itself fails."""
+
+    async def mock_coro():
+        pass
+
+    monkeypatch.setattr(client._auth_client, 'refresh_token', mock_coro)
+    monkeypatch.setattr(client, 'valid_token_set', mock_coro)
+
+    monkeypatch.setattr('uuid.uuid4', lambda: 'FOO')
+
+    class AsyncContextManager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            raise ValueError('BAR')  # randomly chosen
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    monkeypatch.setattr(aiohttp.ClientSession, 'request', AsyncContextManager)
+
+    exp_msg = r'\[FOO\] Request call failed: BAR'
+    with pytest.raises(exceptions.GCPHTTPError, match=exp_msg):
+        await client.request(
+            'get', conftest.API_URL, token_refresh_attempts=0)
 
 
 def simple_json_callback(resp):
