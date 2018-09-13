@@ -127,11 +127,13 @@ class GDNSClient(http.AIOConnection):
         managed zone name which removes the trailing dot and replaces
         other dots with dashes, and in the case of reverse records,
         uses only the two most significant octets, prepended with
-        'reverse'.
+        'reverse'. At least two octets are required for reverse DNS zones.
 
         Example:
            get_managed_zone('example.com.') = 'example-com'
+           get_managed_zone('20.10.in-addr.arpa.) = 'reverse-20-10'
            get_managed_zone('30.20.10.in-addr.arpa.) = 'reverse-20-10'
+           get_managed_zone('40.30.20.10.in-addr.arpa.) = 'reverse-20-10'
 
         Args:
             zone (str): DNS zone.

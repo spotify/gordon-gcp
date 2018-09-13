@@ -150,7 +150,9 @@ async def test_get_records_for_zone(fake_response_data, client, caplog,
 
 @pytest.mark.parametrize('dns_zone,exp_managed_zone', [
     ('example.com.', 'example-com'),
-    ('30.20.10.in-addr.arpa.', 'reverse-20-10')
+    ('20.10.in-addr.arpa.', 'reverse-20-10'),
+    ('30.20.10.in-addr.arpa.', 'reverse-20-10'),
+    ('40.30.20.10.in-addr.arpa.', 'reverse-20-10')
 ])
 def test_get_managed_zone(dns_zone, exp_managed_zone, client):
     assert exp_managed_zone == client.get_managed_zone(dns_zone)
