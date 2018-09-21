@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev25 (2018-09-20)
+------------------------
+
+Removed
+~~~~~~~
+* Removed superfluous jsonschema validation logging.
+
+
 0.0.1.dev23 & 0.0.1.dev24 (2018-09-12/13)
 -----------------------------------------
 
