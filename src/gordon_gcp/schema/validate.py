@@ -133,8 +133,8 @@ class MessageValidator:
 
         except jsonschema.ValidationError as e:
             msg = (f'Given message was not valid against the schema '
-                   f'"{schema_name}"')
-            err = {'msg': msg, 'exc_info': e}
+                   f'"{schema_name}": {e.message}')
+            err = {'msg': msg}
 
         if err:
             logging.error(**err)
