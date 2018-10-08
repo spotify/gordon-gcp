@@ -102,10 +102,13 @@ class GDNSClient(http.AIOConnection):
     REVERSE_PREFIX = 'reverse-'
 
     def __init__(self, project=None, auth_client=None, api_version='v1',
-                 session=None):
+                 session=None, default_zone_prefix=None):
         super().__init__(auth_client=auth_client, session=session)
         self.project = project
         self._base_url = f'{self.BASE_URL}/{api_version}/projects/{project}'
+        prefix = f'{default_zone_prefix}-' if default_zone_prefix else ''
+        self.forward_prefix = f'{prefix}'
+        self.reverse_prefix = f'{prefix}{self.REVERSE_PREFIX}'
 
     @staticmethod
     def get_rrsets_as_objects(rrsets):
@@ -142,8 +145,8 @@ class GDNSClient(http.AIOConnection):
 
         """
         if zone.endswith('.in-addr.arpa.'):
-            return self.REVERSE_PREFIX + '-'.join(zone.split('.')[-5:-3])
-        return '-'.join(zone.split('.')[:-1])
+            return self.reverse_prefix + '-'.join(zone.split('.')[-5:-3])
+        return self.forward_prefix + '-'.join(zone.split('.')[:-1])
 
     async def get_records_for_zone(self, dns_zone, params=None):
         """Get all resource record sets for a managed zone, using the DNS zone.

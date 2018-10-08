@@ -8,6 +8,7 @@ handlers = ["syslog"]
 [gcp]
 project = "my-gcp-project"
 dns_zone = "example.com."
+default_zone_prefix = "production"
 
 [gcp.enricher]
 keyfile = "/path/to/keyfiles/compute.json"
