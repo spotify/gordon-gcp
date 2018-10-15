@@ -174,8 +174,15 @@ class GCEAuthority:
             coros.add(coro)
 
         all_results = await asyncio.gather(*coros, return_exceptions=True)
+        all_results = self._filter_results(all_results)
 
-        return self._filter_results(all_results)
+        instances = []
+        for instance in all_results:
+            if instance['status'] == 'TERMINATED':
+                logging.info(f'Skipping terminated instance: "{instance}"')
+                continue
+            instances.append(instance)
+        return instances
 
     def _create_instance_rrset(self, instance):
         ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']

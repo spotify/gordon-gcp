@@ -1,6 +1,22 @@
 Changelog
 =========
 
+0.0.1.dev26 (2018-10-15)
+------------------------
+
+Added
+~~~~~
+* Filter out instances with status = TERMINATED in the authority.
+
+Changed
+~~~~~~~
+* Lower minimum TTL for the event schema to 60.
+
+Fixed
+~~~~~
+* Correct an external URL used in doc generation.
+
+
 0.0.1.dev25 (2018-09-20)
 ------------------------
 
