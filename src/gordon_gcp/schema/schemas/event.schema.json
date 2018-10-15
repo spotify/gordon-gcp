@@ -49,7 +49,7 @@
                     "description": "TTL in seconds; default 300 seconds",
                     "type": "number",
                     "maximum": 86400,
-                    "minimum": 300,
+                    "minimum": 60,
                     "default": 300
                 },
                 "type": {
