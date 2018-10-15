@@ -177,6 +177,6 @@ man_pages = [
 # TODO (econchick@): Once gordon core docs are live, add here
 intersphinx_mapping = {
     'https://docs.python.org/3': None,
-    'https://googlecloudplatform.github.io/google-cloud-python/latest/': None,
+    'https://googleapis.github.io/google-cloud-python/latest/': None,
     'https://aiohttp.readthedocs.io/en/stable/': None,
 }
