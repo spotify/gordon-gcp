@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev27 (2018-10-16)
+------------------------
+
+Removed
+~~~~~~~
+* Revert filtering out instances with status = TERMINATED in the authority.
+
+
 0.0.1.dev26 (2018-10-15)
 ------------------------
 
