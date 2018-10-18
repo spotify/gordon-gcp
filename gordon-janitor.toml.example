@@ -9,6 +9,7 @@ cleanup_timeout = 60
 keyfile = "/path/to/dns-service-account.json"
 project = "gordon-dns-example"
 scopes = ["ndev.clouddns.readonly"]
+default_zone_prefix = "production"
 
 [gcp.gpubsub]
 keyfile = "/path/to/pubsub-service-account.json"

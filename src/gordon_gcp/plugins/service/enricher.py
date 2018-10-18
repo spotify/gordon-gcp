@@ -121,7 +121,9 @@ class GCEEnricherBuilder:
         return http.AIOConnection(auth_client=self._init_auth())
 
     def _init_dns_client(self):
-        return gdns.GDNSClient(self.config['project'], self._init_auth())
+        return gdns.GDNSClient(
+            self.config['project'], self._init_auth(),
+            default_zone_prefix=self.config.get('default_zone_prefix', ''))
 
     def build_enricher(self):
         return GCEEnricher(self.config, self.metrics, self.http_client,

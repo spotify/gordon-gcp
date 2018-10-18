@@ -158,6 +158,18 @@ def test_get_managed_zone(dns_zone, exp_managed_zone, client):
     assert exp_managed_zone == client.get_managed_zone(dns_zone)
 
 
+@pytest.mark.parametrize('dns_zone,prefix,expected', [
+    ('example.com.', 'production', 'production-example-com'),
+    ('20.10.in-addr.arpa.', 'production', 'production-reverse-20-10'),
+    ('30.20.10.in-addr.arpa.', 'testing', 'testing-reverse-20-10'),
+    ('40.30.20.10.in-addr.arpa.', 'testing', 'testing-reverse-20-10')
+])
+def test_get_managed_zone_with_prefix(mocker, dns_zone, prefix, expected):
+    client = gdns.GDNSClient('a-project', auth_client=mocker.Mock(),
+                             session=mocker.Mock(), default_zone_prefix=prefix)
+    assert expected == client.get_managed_zone(dns_zone)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('resp,expected', [
     ({'status': 'pending'}, False),
