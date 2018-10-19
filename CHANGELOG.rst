@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev28 (2018-10-19)
+------------------------
+
+Added
+~~~~~
+* Allow supplying custom managed zone name prefix.
+
+
 0.0.1.dev27 (2018-10-16)
 ------------------------
 
