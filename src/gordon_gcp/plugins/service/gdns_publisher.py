@@ -130,7 +130,9 @@ class GDNSPublisherBuilder:
 
     def _init_dns_client(self):
         auth_client = self._init_auth_client()
-        return gdns.GDNSClient(self.config['project'], auth_client)
+        return gdns.GDNSClient(
+            self.config['project'], auth_client,
+            default_zone_prefix=self.config.get('default_zone_prefix', ''))
 
     def build_publisher(self):
         self._validate_config()

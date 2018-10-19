@@ -110,7 +110,8 @@ class GDNSReconcilerBuilder:
         kwargs = {
             'project': self.config['project'],
             'api_version': self.config.get('api_version', 'v1'),
-            'auth_client': auth_client
+            'auth_client': auth_client,
+            'default_zone_prefix': self.config.get('default_zone_prefix', '')
         }
         return gdns.GDNSClient(**kwargs)
 
