@@ -101,6 +101,10 @@ Additional plugin-specific configuration is needed:
 
     `Optional`: List of unique, user-assigned project IDs (``projectId``) that will be ignored when fetching projects.
 
+.. option:: project_whitelist=["STR","STR"]
+
+    `Optional`: List of unique, user-assigned project IDs (``projectId``) that will be used to fetch instances. If set, janitor will only look at these projects, it will not fetch active projects and the project_blacklist will be ignored.
+
 .. option:: instance_filter="STR"
 
     `Optional`: String used to filter instances by instance attributes. It is passed directly to GCE's `v1.instances.aggregatedList <https://cloud.google.com/compute/docs/reference/rest/v1/instances/aggregatedList>`_ endpoint's `filter` parameter.

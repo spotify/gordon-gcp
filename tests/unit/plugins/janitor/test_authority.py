@@ -232,3 +232,31 @@ def test_create_msgs_bad_json(caplog, fake_authority):
     results = fake_authority._create_msgs([partial_instance])
     assert [] == results
     assert 1 == len(caplog.records)
+
+
+@pytest.mark.parametrize('whitelist,expected', [
+    (['whitelisted_1', 'whitelisted_2'], ['whitelisted_1', 'whitelisted_2']),
+    (None, ["project_1", "project_2"])
+])
+@pytest.mark.asyncio
+async def test_get_projects_with_whitelist(
+        mocker, whitelist, expected, authority_config,
+        get_gce_client, create_mock_coro, metrics):
+    active_projects_mock, active_projects_coro = create_mock_coro()
+    active_projects_mock.return_value = [{'projectId': "project_1"},
+                                         {'projectId': "project_2"}]
+    crm_client = get_gce_client(gcrm.GCRMClient)
+    crm_client.list_all_active_projects = active_projects_coro
+
+    gce_client = get_gce_client(gce.GCEClient)
+
+    mock_rrset_channel = mocker.Mock()
+
+    authority_config['project_whitelist'] = whitelist
+
+    gce_authority = authority.GCEAuthority(
+        authority_config, metrics, crm_client, gce_client, mock_rrset_channel)
+
+    actual = await gce_authority._get_projects()
+
+    assert actual == expected
