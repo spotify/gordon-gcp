@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev29 (2018-12-5)
+-----------------------
+
+Added
+~~~~~
+* Add project_whitelist janitor authority config
+
+
 0.0.1.dev28 (2018-10-19)
 ------------------------
 
