@@ -89,7 +89,7 @@ Additional plugin-specific configuration is needed:
 
     Note: this is separate from Google's 'managed zone' names.  Google uses custom string names with specific `requirements <https://cloud.google.com/dns/api/v1/managedZones#resource>`_ for storing records. Gordon requires that managed zone names be based on DNS names. For all domains, remove the trailing dot and replace all other dots with dashes.  For reverse records, then use only the two most significant octets, prepended with 'reverse-'.  (E.g. ``foo.bar.com.`` -> ``foo-bar-com`` and ``0.168.192.in-addr.arpa.`` -> ``reverse-168-192.``)
 
-.. option:: metadata_blackklist=[["STR","STR"],["STR","STR"]]
+.. option:: metadata_blacklist=[["STR","STR"],["STR","STR"]]
 
     `Optional`: List of key-value pairs that will be used to filter out unwanted GCE instances by `instance metadata <https://cloud.google.com/compute/docs/storing-retrieving-metadata>`_. Note that both the key and the value must match for an instance to be filtered out.
 
@@ -97,13 +97,15 @@ Additional plugin-specific configuration is needed:
 
     `Optional`: List of `network tags <https://cloud.google.com/vpc/docs/add-remove-network-tags>`_  that will be used to filter out unwanted GCE instances.
 
+.. _project_blacklist:
+
 .. option:: project_blacklist=["STR","STR"]
 
     `Optional`: List of unique, user-assigned project IDs (``projectId``) that will be ignored when fetching projects.
 
 .. option:: project_whitelist=["STR","STR"]
 
-    `Optional`: List of unique, user-assigned project IDs (``projectId``) that will be used to fetch instances. If set, janitor will only look at these projects, it will not fetch active projects and the project_blacklist will be ignored.
+    `Optional`: List of unique, user-assigned project IDs (``projectId``) that will be used to fetch instances. If set, janitor will only look at these projects, it will not fetch active projects and the `project_blacklist`_ will be ignored.
 
 .. option:: instance_filter="STR"
 
