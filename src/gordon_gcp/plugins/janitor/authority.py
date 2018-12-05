@@ -141,6 +141,10 @@ class GCEAuthority:
         return set(p.get('projectId') for p in active_projects)
 
     async def _get_projects(self):
+        project_whitelist = self.config.get('project_whitelist')
+        if project_whitelist:
+            return sorted(project_whitelist)
+
         projects = await self._get_active_project_ids()
         project_blacklist = set(self.config.get('project_blacklist', []))
         sorted_projects = sorted(projects - project_blacklist)
