@@ -240,6 +240,8 @@ class GDNSPublisher:
         """
         changes = self._format_resource_record_changes(
             action, resource_record)
+        metrics_context = {'plugin': 'gdnspublisher', 'action': action}
+
         try:
             change_id = await self.dns_client.publish_changes(zone, changes)
         except exceptions.GCPHTTPResponseError as e:
@@ -249,6 +251,8 @@ class GDNSPublisher:
             msg = ('Conflict found when publishing records. Handling and '
                    'retrying.')
             logger.info(msg)
+            await self.metrics.incr(
+                'publish-records-conflict', context=metrics_context)
 
             # get the records GDNS has for this name and type
             deletions = await self._get_rrsets_by_name_and_type(
@@ -260,8 +264,13 @@ class GDNSPublisher:
             msg = ('Timed out while waiting for DNS changes to transition '
                    'to \'done\' status.')
             logger.error(msg)
+            await self.metrics.incr(
+                'publish-records-timeout', context=metrics_context)
             raise exceptions.GCPPublishRecordTimeoutError(msg)
+
         logger.info('Records successfully published.')
+        await self.metrics.incr(
+            'publish-records-success', context=metrics_context)
 
     async def handle_message(self, event_msg):
         """Publish changes extracted from the event message.
