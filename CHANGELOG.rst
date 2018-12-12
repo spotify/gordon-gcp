@@ -1,6 +1,13 @@
 Changelog
 =========
 
+0.0.1.dev30 (2018-12-12)
+
+Added
+~~~~~
+
+* Add metrics for record dispatching.
+
 0.0.1.dev29 (2018-12-05)
 ------------------------
 
