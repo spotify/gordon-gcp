@@ -126,6 +126,7 @@ async def test_run(raises, gpubsub_publisher_inst,
     context = {'plugin': 'gpubsub-publisher'}
     gpubsub_publisher_inst.metrics._timer_mock.assert_called_once_with(
         'plugin-runtime', context=context)
+    context['action'] = 'additions'
     start_mock = gpubsub_publisher_inst.metrics.timer_stub.start_mock
     start_mock.assert_called_once_with()
 

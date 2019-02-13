@@ -238,13 +238,15 @@ class GPubsubPublisher:
         Once ``None`` is received from the channel, finish processing
         records and clean up any outstanding tasks.
         """
-        context = {'plugin': 'gpubsub-publisher'}
-        timer = self.metrics.timer('plugin-runtime', context=context)
+        base_context = {'plugin': 'gpubsub-publisher'}
+        timer = self.metrics.timer('plugin-runtime', context=base_context)
         await timer.start()
         while True:
             change_message = await self.changes_channel.get()
             if change_message is None:
                 break
+            context = base_context.copy()
+            context['action'] = change_message['action']
             await self.metrics.incr('change-msg-recv', context=context)
             try:
                 await self.publish(change_message)
