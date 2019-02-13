@@ -333,6 +333,9 @@ async def test_handle_pubsub_msg(mocker, monkeypatch, consumer, raw_msg_data,
     assert 4 == len(caplog.records)
     assert 'consume' == event_msg.phase
     mock_run_coro_threadsafe.assert_called_once()
+    consumer.metrics._incr_mock.assert_called_once_with(
+        'message-validated', value=1,
+        context={'plugin': 'event-consumer', 'schema': 'audit-log'})
 
 
 @pytest.mark.asyncio
@@ -365,6 +368,9 @@ async def test_handle_pubsub_msg_invalid(mocker, monkeypatch, consumer, caplog,
     mock_create_gevent_msg.assert_not_called()
     assert 0 == consumer.success_channel.qsize()
     assert 3 == len(caplog.records)
+    consumer.metrics._incr_mock.assert_called_once_with(
+        'message-validated', value=1,
+        context={'plugin': 'event-consumer', 'schema': 'unknown'})
 
 
 @pytest.mark.asyncio
@@ -378,6 +384,7 @@ async def test_handle_pubsub_msg_old(mocker, monkeypatch, consumer,
     pubsub_msg.publish_time = publish_time - datetime.timedelta(
         seconds=(consumer._max_msg_age + 1))
     context = {
+        'plugin': 'event-consumer',
         'msg_id': pubsub_msg.message_id,
         'msg_age': consumer._max_msg_age + 1
     }
