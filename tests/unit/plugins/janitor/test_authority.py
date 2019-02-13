@@ -130,11 +130,12 @@ async def test_run_publishes_msg_to_channel(mocker, authority_config,
         _expected_rrsets.append({
             'name': f"{instance['name']}.{authority_config['dns_zone']}",
             'type': 'A',
-            'rrdatas': [ip]})
+            'rrdatas': [ip],
+            'source': 'gceauthority'})
     expected_rrsets = _expected_rrsets * 2
     expected_msg = {
         'zone': authority_config['dns_zone'],
-        'rrsets': expected_rrsets
+        'rrsets': expected_rrsets,
     }
 
     # one message includes data for all projects

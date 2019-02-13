@@ -55,6 +55,7 @@ To use:
 """
 
 import asyncio
+import collections
 import logging
 
 import attr
@@ -67,6 +68,34 @@ from gordon_gcp.clients import gdns
 
 
 __all__ = ('GDNSReconciler',)
+
+
+@attr.s
+class ResourceRecordSet:
+    """DNS Resource Record Set.
+
+    Args:
+        name (str): Name/label.
+        kind (str): ID for what kind of GCP resource this is. For example
+            'dns#resourceRecordSet'
+        type (str): Record type (see `Google's supported records
+            <https://cloud.google.com/dns/overview#supported_dns_record_
+            types>`_ for valid types).
+        rrdatas (list): Record data according to RFC 1034§3.6.1 and
+            RFC 1035§5.
+        ttl (int): (optional) Number of seconds that the record set can
+            be cached by resolvers. Defaults to 300.
+        source (str): (optional) Source of the record set.
+    """
+    # TODO (lynn): This will be moved to a common package to be shared
+    #   between all of gordon* packages. It will also make use of attrs
+    #   ability to optionally validate upon creation.
+    name = attr.ib(type=str)
+    type = attr.ib(type=str)
+    rrdatas = attr.ib(type=list)
+    kind = attr.ib(type=str, default='dns#resourceRecordSet')
+    ttl = attr.ib(type=int, default=300)
+    source = attr.ib(type=str, default=None)
 
 
 class GDNSReconcilerBuilder:
@@ -209,20 +238,33 @@ class GDNSReconciler:
         may be supported in the future.
 
         Args:
-            desired_rrsets (list(GCPResourceRecordSet)): Desired record
+            desired_rrsets (list(ResourceRecordSet)): Desired record
                 sets that are not in Google Cloud DNS.
             action (str): (optional) action for these corrective
                 messages. Defaults to ``'additions'``.
         """
+        source_count = collections.defaultdict(int)
         for rrset in desired_rrsets:
+            rrset = attr.asdict(rrset)
+
+            # count and remove source before sending message to channel
+            source = rrset.pop('source', None)
+            source_count[source] += 1
+
             msg = {
-                'resourceRecords': attr.asdict(rrset),
+                'resourceRecords': rrset,
                 'action': action
             }
             logging.debug(f'Creating the following change message: {msg}')
             await self.changes_channel.put(msg)
 
-        logging.info(f'Created {len(desired_rrsets)} change messages.')
+        context = {'plugin': 'reconciler', 'action': action}
+        for source, count in source_count.items():
+            context['source'] = source if source else 'unknown'
+            await self.metrics.set('rrsets-handled', count, context=context)
+
+        logging.info(
+            f'Created {len(desired_rrsets)} change messages for {action}.')
 
     def _parse_rrset_message(self, message):
         # assert that keys 'zone' and 'rrsets' are present, and return
@@ -244,7 +286,7 @@ class GDNSReconciler:
         return zone, rrsets
 
     def _remove_soa_and_root_ns(self, zone, rrsets):
-        """Given a list of GCPResourceRecordSets, remove SOA and root NS.
+        """Given a list of ResourceRecordSets, remove SOA and root NS.
 
         This is necessary because Google won't let you override its SOA and root
         NS records.
@@ -254,11 +296,11 @@ class GDNSReconciler:
         Args:
             zone (str): The domain name the rrsets are for, including trailing
                 dot.
-            rrsets (list[GCPResourceRecordSet]): The GCPResourceRecordSets to
+            rrsets (list[ResourceRecordSet]): The ResourceRecordSets to
                 filter.
 
         Returns:
-            list[GCPResourceRecordSet]: The filtered GCPResourceRecordSets.
+            list[ResourceRecordSet]: The filtered ResourceRecordSets.
         """
         clean_rrsets = []
         for rrset in rrsets:
@@ -286,17 +328,18 @@ class GDNSReconciler:
             tuple[list[rrset], list[rrset]]: The missing and extra rrset lists.
         """
         desired_rrsets = {}
-        for rrset in gdns.GDNSClient.get_rrsets_as_objects(rrsets):
+        for rrset in rrsets:
             # GDNSClient's repr is in a fixed order and should be correctly
             # comparable between rrsets.  (A string representation is the safest
             # way to turn an rrset into something hashable, since the rrset
             # contains a list.)
-            desired_rrsets[repr(rrset)] = rrset
+            rrset_obj = ResourceRecordSet(**rrset)
+            desired_rrsets[repr(rrset_obj)] = rrset_obj
 
         actual_rrsets = {}
-        for rrset in gdns.GDNSClient.get_rrsets_as_objects(
-                await self.dns_client.get_records_for_zone(zone)):
-            actual_rrsets[repr(rrset)] = rrset
+        for rrset in await self.dns_client.get_records_for_zone(zone):
+            rrset_obj = ResourceRecordSet(**rrset)
+            actual_rrsets[repr(rrset_obj)] = rrset_obj
 
         missing_rrsets = [
             rrset for rrset_repr, rrset in desired_rrsets.items()
@@ -349,8 +392,7 @@ class GDNSReconciler:
         is received from the channel, emits a final ``None`` message to the
         :obj:`changes_channel`.
         """
-        plugin = 'reconciler'
-        context = {'plugin': plugin}
+        context = {'plugin': 'reconciler'}
         timer = self.metrics.timer('plugin-runtime', context=context)
         await timer.start()
         while True:
@@ -361,12 +403,6 @@ class GDNSReconciler:
                 zone, raw_rrsets = self._parse_rrset_message(desired_rrset)
                 missing_rrsets, extra_rrsets = (
                     await self.validate_rrsets_by_zone(zone, raw_rrsets))
-                await self.metrics.set(
-                    'additions',
-                    len(missing_rrsets), context=context)
-                await self.metrics.set(
-                    'deletions',
-                    len(extra_rrsets), context=context)
 
                 await self.publish_change_messages(
                     missing_rrsets, action='additions')

@@ -18,7 +18,6 @@ import copy
 import logging
 
 import aiohttp
-import attr
 import pytest
 from aioresponses import aioresponses
 
@@ -27,41 +26,6 @@ from gordon_gcp.clients import gdns
 
 
 logging.getLogger('asyncio').setLevel(logging.WARNING)
-
-
-@pytest.fixture
-def rrset_dict():
-    return {
-        'name': 'test',
-        'type': 'A',
-        'rrdatas': ['10.1.2.3'],
-        'ttl': 500,
-        'kind': 'dns#resourceRecordSet'
-    }
-
-
-def test_create_gcp_rrset(rrset_dict):
-    """Create valid GCPResourceRecordSet instances."""
-    rrset = gdns.GCPResourceRecordSet(**rrset_dict)
-    assert rrset_dict == attr.asdict(rrset)
-
-
-def test_create_gcp_rrset_no_ttl(rrset_dict):
-    # default TTL when not provided
-    data = rrset_dict.copy()
-    data.pop('ttl')
-    rrset = gdns.GCPResourceRecordSet(**data)
-    data['ttl'] = 300
-    assert data == attr.asdict(rrset)
-
-
-def test_create_gcp_rrset_raises():
-    # Raise when required params are missing
-    missing_params = {
-        'name': 'test'
-    }
-    with pytest.raises(TypeError):
-        gdns.GCPResourceRecordSet(**missing_params)
 
 
 @pytest.fixture
@@ -89,11 +53,6 @@ def client(mocker, create_mock_coro):
 
 def test_dns_client_default(client):
     assert 'a-project' == client.project
-
-
-def test_get_rrsets_as_objects(rrset_dict):
-    exp = [gdns.GCPResourceRecordSet(**rrset_dict)]
-    assert exp == gdns.GDNSClient.get_rrsets_as_objects([rrset_dict])
 
 
 @pytest.mark.asyncio
