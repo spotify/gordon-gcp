@@ -134,13 +134,15 @@ async def test_run(raises, gpubsub_publisher_inst,
 
     assert 2 == len(caplog.records)
     assert 'Finished sending' in str(caplog.records.pop())
-    gpubsub_publisher_inst.metrics._incr_mock.assert_has_calls(
-            [mock.call('change-msg-recv', value=1, context=context)])
     if raises:
         assert 'Exception' in str(caplog.records.pop())
+        context['result'] = 'error'
+        gpubsub_publisher_inst.metrics._incr_mock.assert_has_calls(
+            [mock.call('change-message', value=1, context=context)])
     else:
         stop_mock = gpubsub_publisher_inst.metrics.timer_stub.stop_mock
         stop_mock.assert_called_once_with()
         assert 'Message published' in str(caplog.records.pop())
+        context['result'] = 'published'
         gpubsub_publisher_inst.metrics._incr_mock.assert_has_calls(
-            [mock.call('change-msg-publish', value=1, context=context)])
+            [mock.call('change-message', value=1, context=context)])

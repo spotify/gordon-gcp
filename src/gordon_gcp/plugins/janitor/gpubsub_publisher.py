@@ -247,14 +247,15 @@ class GPubsubPublisher:
                 break
             context = base_context.copy()
             context['action'] = change_message['action']
-            await self.metrics.incr('change-msg-recv', context=context)
             try:
                 await self.publish(change_message)
-                await self.metrics.incr(
-                    'change-msg-publish', context=context)
+                context['result'] = 'published'
             except Exception as e:  # todo
                 logging.error('Exception while trying to publish message to '
                               f' pubsub: {e}')
+                context['result'] = 'error'
+
+            await self.metrics.incr('change-message', context=context)
 
         await self.cleanup()
         await timer.stop()
