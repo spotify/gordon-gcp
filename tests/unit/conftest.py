@@ -36,6 +36,18 @@ API_URL = f'{API_BASE_URL}/v1/foo_endpoint'
 
 
 @pytest.fixture
+def rrset_dict():
+    return {
+        'name': 'test',
+        'type': 'A',
+        'rrdatas': ['10.1.2.3'],
+        'ttl': 500,
+        'kind': 'dns#resourceRecordSet',
+        'source': None
+    }
+
+
+@pytest.fixture
 def fake_response_data():
     return {
         'rrsets': [

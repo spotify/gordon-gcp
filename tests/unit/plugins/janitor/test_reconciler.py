@@ -18,6 +18,7 @@ import asyncio
 from unittest import mock
 
 import aiohttp
+import attr
 import pytest
 
 from gordon_gcp.clients import auth
@@ -63,6 +64,36 @@ def auth_client(mocker, monkeypatch):
     monkeypatch.setattr(
         'gordon_gcp.plugins.janitor.reconciler.auth.GAuthClient', mock)
     return mock
+
+
+@pytest.fixture
+def rrset_dict_from_attr(rrset_dict):
+    rrset_dict['source'] = None
+    return rrset_dict
+
+
+def test_create_gcp_rrset(rrset_dict, rrset_dict_from_attr):
+    """Create valid ResourceRecordSet instances."""
+    rrset = reconciler.ResourceRecordSet(**rrset_dict)
+    assert rrset_dict_from_attr == attr.asdict(rrset)
+
+
+def test_create_gcp_rrset_no_ttl(rrset_dict, rrset_dict_from_attr):
+    # default TTL when not provided
+    data = rrset_dict.copy()
+    data.pop('ttl')
+    rrset = reconciler.ResourceRecordSet(**data)
+    rrset_dict_from_attr['ttl'] = 300
+    assert rrset_dict_from_attr == attr.asdict(rrset)
+
+
+def test_create_gcp_rrset_raises():
+    # Raise when required params are missing
+    missing_params = {
+        'name': 'test'
+    }
+    with pytest.raises(TypeError):
+        reconciler.ResourceRecordSet(**missing_params)
 
 
 args = 'timeout,exp_timeout'
@@ -150,7 +181,7 @@ async def test_publish_change_messages(recon_client, fake_response_data,
                                        caplog):
     """Publish message to changes queue."""
     rrsets = fake_response_data['rrsets']
-    desired_rrsets = [gdns.GCPResourceRecordSet(**kw) for kw in rrsets]
+    desired_rrsets = [reconciler.ResourceRecordSet(**kw) for kw in rrsets]
 
     await recon_client.publish_change_messages(desired_rrsets)
 
@@ -195,11 +226,11 @@ def soa_ns_rrsets():
 def test__remove_soa_and_root_ns(fake_response_data, soa_ns_rrsets,
                                  recon_client):
     rrsets = [
-        gdns.GCPResourceRecordSet(**rrset)
+        reconciler.ResourceRecordSet(**rrset)
         for rrset in fake_response_data['rrsets']
     ]
     soa_ns_rrsets = [
-        gdns.GCPResourceRecordSet(**rrset) for rrset in soa_ns_rrsets
+        reconciler.ResourceRecordSet(**rrset) for rrset in soa_ns_rrsets
     ]
     rrsets_all = rrsets + soa_ns_rrsets
     expected = rrsets + [soa_ns_rrsets[2]]
@@ -244,11 +275,11 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
     if has_desired:
         input_rrsets = rrsets
         expected_missing_rrsets = [
-            gdns.GCPResourceRecordSet(**record)
+            reconciler.ResourceRecordSet(**record)
             for record in [rrsets[0], soa_ns_rrsets[2]]
         ]
         expected_extra_rrsets = [
-            gdns.GCPResourceRecordSet(**record)
+            reconciler.ResourceRecordSet(**record)
             for record in [extra_rrset]
         ]
     actual_missing_rrsets, actual_extra_rrsets = (
@@ -286,14 +317,14 @@ async def test_run(msg, exp_log_records, exp_mock_calls, qsize, additions,
     async def mock_validate_rrsets_by_zone(zone, rrsets):
         nonlocal mock_validate_rrsets_by_zone_called
         mock_validate_rrsets_by_zone_called += 1
-        return (rrsets, [gdns.GCPResourceRecordSet(**extra_rrset)])
+        return (rrsets, [reconciler.ResourceRecordSet(**extra_rrset)])
 
     monkeypatch.setattr(
         recon_client, 'validate_rrsets_by_zone', mock_validate_rrsets_by_zone)
 
     if 'rrsets' in msg and msg['rrsets'] == 'FAKE':
         msg['rrsets'] = [
-            gdns.GCPResourceRecordSet(**rrset)
+            reconciler.ResourceRecordSet(**rrset)
             for rrset in fake_response_data['rrsets']
         ]
     await recon_client.rrset_channel.put(msg)
@@ -309,10 +340,14 @@ async def test_run(msg, exp_log_records, exp_mock_calls, qsize, additions,
         'plugin-runtime', context=context)
     recon_client.metrics.timer_stub.start_mock.assert_called_once_with()
     recon_client.metrics.timer_stub.stop_mock.assert_called_once_with()
-    if additions or deletions:
+    context['source'] = 'unknown'
+    if additions:
+        context['action'] = 'additions'
         recon_client.metrics._set_mock.assert_has_calls(
             [mock.call(
-                'additions', additions, context=context)])
+                'rrsets-handled', additions, context=context)])
+    if deletions:
+        context['action'] = 'deletions'
         recon_client.metrics._set_mock.assert_has_calls(
             [mock.call(
-                'deletions', deletions, context=context)])
+                'rrsets-handled', deletions, context=context)])

@@ -320,6 +320,7 @@ class GPSEventConsumer:
             msg_logger.warn(f'Message is too old ({msg_age} seconds), '
                             'acking and discarding.')
             context = {
+                'plugin': 'event-consumer',
                 'msg_id': msg_id,
                 'msg_age': msg_age
             }
@@ -338,6 +339,10 @@ class GPSEventConsumer:
             return
 
         schema = self._get_and_validate_pubsub_msg_schema(data)
+        metrics_schema = schema if schema else 'unknown'
+        context = {'plugin': 'event-consumer', 'schema': metrics_schema}
+        await self.metrics.incr('message-validated', context=context)
+
         if schema is None:
             msg_logger.warn('No schema found for message received, acking.')
             pubsub_msg.ack()
