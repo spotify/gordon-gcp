@@ -39,46 +39,14 @@ To use:
     loop = asyncio.get_event_loop()
     loop.run_until_complete(print_first_record(client))
 
-    # example output
-    # GCPResourceRecordSet(name='foo.testzone.com', type='A',
-    #                      rrdatas=['10.1.2.3'], ttl=300)
-
 """
 import json
 import logging
 
-import attr
-
 from gordon_gcp.clients import http
 
 
-__all__ = ('GCPResourceRecordSet', 'GDNSClient')
-
-
-@attr.s
-class GCPResourceRecordSet:
-    """DNS Resource Record Set.
-
-    Args:
-        name (str): Name/label.
-        kind (str): ID for what kind of GCP resource this is. For example
-            'dns#resourceRecordSet'
-        type (str): Record type (see `Google's supported records
-            <https://cloud.google.com/dns/overview#supported_dns_record_
-            types>`_ for valid types).
-        rrdatas (list): Record data according to RFC 1034§3.6.1 and
-            RFC 1035§5.
-        ttl (int): (optional) Number of seconds that the record set can
-            be cached by resolvers. Defaults to 300.
-    """
-    # TODO (lynn): This will be moved to a common package to be shared
-    #   between all of gordon* packages. It will also make use of attrs
-    #   ability to optionally validate upon creation.
-    name = attr.ib(type=str)
-    type = attr.ib(type=str)
-    rrdatas = attr.ib(type=list)
-    kind = attr.ib(type=str, default='dns#resourceRecordSet')
-    ttl = attr.ib(type=int, default=300)
+__all__ = ('GDNSClient',)
 
 
 class GDNSClient(http.AIOConnection):
@@ -109,17 +77,6 @@ class GDNSClient(http.AIOConnection):
         prefix = f'{default_zone_prefix}-' if default_zone_prefix else ''
         self.forward_prefix = f'{prefix}'
         self.reverse_prefix = f'{prefix}{self.REVERSE_PREFIX}'
-
-    @staticmethod
-    def get_rrsets_as_objects(rrsets):
-        """Return a list of rrsets as GCPResourceRecordSets.
-
-        Args:
-            rrsets (list of dict): RRsets represented as dicts.
-        Returns:
-            list of :class:`GCPResourceRecordSet` objects.
-        """
-        return [GCPResourceRecordSet(**rrset) for rrset in rrsets]
 
     def get_managed_zone(self, zone):
         """Get the GDNS managed zone name for a DNS zone.
@@ -165,7 +122,7 @@ class GDNSClient(http.AIOConnection):
             params = {}
 
         if 'fields' not in params:
-            # makes it easier to create GCPResourceRecordSet instances
+            # Get only the fields we care about
             params['fields'] = ('rrsets/name,rrsets/kind,rrsets/rrdatas,'
                                 'rrsets/type,rrsets/ttl,nextPageToken')
         next_page_token = None

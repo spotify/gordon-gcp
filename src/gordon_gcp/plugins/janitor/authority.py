@@ -187,7 +187,8 @@ class GCEAuthority:
         return {
             'name': fqdn,
             'type': 'A',
-            'rrdatas': [ip]
+            'rrdatas': [ip],
+            'source': 'gceauthority'
         }
 
     def _create_msgs(self, instances):

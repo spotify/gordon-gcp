@@ -1,7 +1,17 @@
 Changelog
 =========
 
+0.0.1.dev31 (2019-02-18)
+------------------------
+
+Updated
+~~~~~~~
+
+* Adjust metrics for graph optimization and to include source in janitor.
+
+
 0.0.1.dev30 (2018-12-12)
+------------------------
 
 Added
 ~~~~~

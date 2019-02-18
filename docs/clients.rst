@@ -60,8 +60,6 @@ GCP Cloud DNS HTTP Client
 .. automodule:: gordon_gcp.clients.gdns
 .. autoclass:: gordon_gcp.GDNSClient
     :members:
-.. autoclass:: gordon_gcp.GCPResourceRecordSet
-    :members:
 
 
 GCRM Client
