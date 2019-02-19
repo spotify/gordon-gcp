@@ -58,7 +58,6 @@ import asyncio
 import collections
 import logging
 
-import attr
 import zope.interface
 from gordon_janitor import interfaces
 
@@ -70,7 +69,6 @@ from gordon_gcp.clients import gdns
 __all__ = ('GDNSReconciler',)
 
 
-@attr.s
 class ResourceRecordSet:
     """DNS Resource Record Set.
 
@@ -81,21 +79,33 @@ class ResourceRecordSet:
         type (str): Record type (see `Google's supported records
             <https://cloud.google.com/dns/overview#supported_dns_record_
             types>`_ for valid types).
-        rrdatas (list): Record data according to RFC 1034§3.6.1 and
+        rrdatas (iter(str)): Record data according to RFC 1034§3.6.1 and
             RFC 1035§5.
         ttl (int): (optional) Number of seconds that the record set can
             be cached by resolvers. Defaults to 300.
-        source (str): (optional) Source of the record set.
+        source (str): (optional) Source of the record set, not considered
+            for equality comparisons.
     """
-    # TODO (lynn): This will be moved to a common package to be shared
-    #   between all of gordon* packages. It will also make use of attrs
-    #   ability to optionally validate upon creation.
-    name = attr.ib(type=str)
-    type = attr.ib(type=str)
-    rrdatas = attr.ib(type=list)
-    kind = attr.ib(type=str, default='dns#resourceRecordSet')
-    ttl = attr.ib(type=int, default=300)
-    source = attr.ib(type=str, default=None)
+    def __init__(self, name, type, rrdatas, kind='dns#resourceRecordSet',
+                 ttl=300, source=None):
+        self.name = name
+        self.type = type
+        self.rrdatas = tuple(rrdatas)
+        self.kind = kind
+        self.ttl = ttl
+        self.source = source
+
+    def __hash__(self):
+        return hash((self.name, self.type, self.rrdatas, self.kind, self.ttl))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return repr(vars(self))
 
 
 class GDNSReconcilerBuilder:
@@ -245,7 +255,7 @@ class GDNSReconciler:
         """
         source_count = collections.defaultdict(int)
         for rrset in desired_rrsets:
-            rrset = attr.asdict(rrset)
+            rrset = vars(rrset)
 
             # count and remove source before sending message to channel
             source = rrset.pop('source', None)
@@ -285,31 +295,25 @@ class GDNSReconciler:
 
         return zone, rrsets
 
-    def _remove_soa_and_root_ns(self, zone, rrsets):
-        """Given a list of ResourceRecordSets, remove SOA and root NS.
-
-        This is necessary because Google won't let you override its SOA and root
-        NS records.
-
-        Returns a new list (doesn't modify in place).
+    @staticmethod
+    def create_rrset_set(zone, rrsets):
+        """Create a set of ResourceRecordSets excluding SOA and zone's NS.
 
         Args:
-            zone (str): The domain name the rrsets are for, including trailing
-                dot.
-            rrsets (list[ResourceRecordSet]): The ResourceRecordSets to
-                filter.
+            zone (str): zone of the rrsets, for NS record exclusion.
+            rrsets (list(dict)): collection of dict representation of RRSets.
 
         Returns:
-            list[ResourceRecordSet]: The filtered ResourceRecordSets.
+            set of :class:`ResourceRecordSet`
         """
-        clean_rrsets = []
+        rrset_set = set()
         for rrset in rrsets:
-            if rrset.type == 'SOA':
+            name = rrset['name']
+            typeStr = rrset['type']
+            if typeStr == 'SOA' or (typeStr == 'NS' and name == zone):
                 continue
-            if rrset.type == 'NS' and rrset.name == zone:
-                continue
-            clean_rrsets.append(rrset)
-        return clean_rrsets
+            rrset_set.add(ResourceRecordSet(**rrset))
+        return rrset_set
 
     async def validate_rrsets_by_zone(self, zone, rrsets):
         """Given a zone, validate current versus desired rrsets.
@@ -325,29 +329,14 @@ class GDNSReconciler:
                 Cloud DNS API's response.
 
         Returns:
-            tuple[list[rrset], list[rrset]]: The missing and extra rrset lists.
+            tuple[set(rrset), set(rrset)]: The missing and extra rrset sets.
         """
-        desired_rrsets = {}
-        for rrset in rrsets:
-            # GDNSClient's repr is in a fixed order and should be correctly
-            # comparable between rrsets.  (A string representation is the safest
-            # way to turn an rrset into something hashable, since the rrset
-            # contains a list.)
-            rrset_obj = ResourceRecordSet(**rrset)
-            desired_rrsets[repr(rrset_obj)] = rrset_obj
 
-        actual_rrsets = {}
-        for rrset in await self.dns_client.get_records_for_zone(zone):
-            rrset_obj = ResourceRecordSet(**rrset)
-            actual_rrsets[repr(rrset_obj)] = rrset_obj
+        desired_rrsets = self.create_rrset_set(zone, rrsets)
+        actual_rrsets = self.create_rrset_set(
+            zone, await self.dns_client.get_records_for_zone(zone))
 
-        missing_rrsets = [
-            rrset for rrset_repr, rrset in desired_rrsets.items()
-            if rrset_repr not in actual_rrsets
-        ]
-        # don't try to add root SOA/NS records
-        missing_rrsets = self._remove_soa_and_root_ns(zone, missing_rrsets)
-
+        missing_rrsets = desired_rrsets - actual_rrsets
         # TODO: This should eventually also emit an actual metric.
         msg = (f'[{zone}] Processed {len(actual_rrsets)} rrset messages '
                f'and found {len(missing_rrsets)} missing rrsets.')
@@ -360,29 +349,14 @@ class GDNSReconciler:
             msg = (f'[{zone}] No desired rrsets for zone; refusing to delete '
                    'all records.')
             logging.info(msg)
-            extra_rrsets = []
+            extra_rrsets = set()
         else:
-            extra_rrsets_raw = [
-                rrset for rrset_repr, rrset in actual_rrsets.items()
-                if rrset_repr not in desired_rrsets
-            ]
-            # don't try to remove root SOA/NS records
-            extra_rrsets_raw = self._remove_soa_and_root_ns(
-                zone, extra_rrsets_raw)
-            # In the case of an update, the records won't match, and we'll end
-            # up with both an addition and a deletion.  But the core publisher
-            # will handle the deletion, so we need to filter that out.
-            missing_keys = ((rs.name, rs.type) for rs in missing_rrsets)
-            extra_rrsets = []
-            for rrset in extra_rrsets_raw:
-                if (rrset.name, rrset.type) not in missing_keys:
-                    extra_rrsets.append(rrset)
-
+            extra_rrsets = actual_rrsets - desired_rrsets
             msg = (f'[{zone}] Processed {len(actual_rrsets)} rrset messages '
                    f'and found {len(extra_rrsets)} extra rrsets.')
             logging.info(msg)
 
-        return (missing_rrsets, extra_rrsets)
+        return missing_rrsets, extra_rrsets
 
     async def run(self):
         """Publish necessary DNS changes to the :obj:`changes_channel`.
@@ -404,10 +378,12 @@ class GDNSReconciler:
                 missing_rrsets, extra_rrsets = (
                     await self.validate_rrsets_by_zone(zone, raw_rrsets))
 
-                await self.publish_change_messages(
-                    missing_rrsets, action='additions')
+                # In the case of an update, we'll end up with both an addition
+                # and a deletion, so send deletions first.
                 await self.publish_change_messages(
                     extra_rrsets, action='deletions')
+                await self.publish_change_messages(
+                    missing_rrsets, action='additions')
             except exceptions.GCPGordonJanitorError as e:
                 msg = f'Dropping message {desired_rrset}: {e}'
                 logging.error(msg, exc_info=e)

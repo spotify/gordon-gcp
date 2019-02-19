@@ -1,6 +1,5 @@
 aiohttp==2.3.9
 asyncio-extras==1.3.0
-attrs==17.4.0
 google-api-core==1.6.0
 google-auth==1.3.0
 google-cloud-pubsub==0.39.1

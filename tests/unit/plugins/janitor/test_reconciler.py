@@ -18,7 +18,6 @@ import asyncio
 from unittest import mock
 
 import aiohttp
-import attr
 import pytest
 
 from gordon_gcp.clients import auth
@@ -67,24 +66,25 @@ def auth_client(mocker, monkeypatch):
 
 
 @pytest.fixture
-def rrset_dict_from_attr(rrset_dict):
+def rrset_dict_after_conversion(rrset_dict):
     rrset_dict['source'] = None
+    rrset_dict['rrdatas'] = tuple(rrset_dict['rrdatas'])
     return rrset_dict
 
 
-def test_create_gcp_rrset(rrset_dict, rrset_dict_from_attr):
+def test_create_gcp_rrset(rrset_dict, rrset_dict_after_conversion):
     """Create valid ResourceRecordSet instances."""
     rrset = reconciler.ResourceRecordSet(**rrset_dict)
-    assert rrset_dict_from_attr == attr.asdict(rrset)
+    assert rrset_dict_after_conversion == vars(rrset)
 
 
-def test_create_gcp_rrset_no_ttl(rrset_dict, rrset_dict_from_attr):
+def test_create_gcp_rrset_no_ttl(rrset_dict, rrset_dict_after_conversion):
     # default TTL when not provided
     data = rrset_dict.copy()
     data.pop('ttl')
     rrset = reconciler.ResourceRecordSet(**data)
-    rrset_dict_from_attr['ttl'] = 300
-    assert rrset_dict_from_attr == attr.asdict(rrset)
+    rrset_dict_after_conversion['ttl'] = 300
+    assert rrset_dict_after_conversion == vars(rrset)
 
 
 def test_create_gcp_rrset_raises():
@@ -223,18 +223,14 @@ def soa_ns_rrsets():
     ]
 
 
-def test__remove_soa_and_root_ns(fake_response_data, soa_ns_rrsets,
-                                 recon_client):
-    rrsets = [
-        reconciler.ResourceRecordSet(**rrset)
-        for rrset in fake_response_data['rrsets']
-    ]
-    soa_ns_rrsets = [
-        reconciler.ResourceRecordSet(**rrset) for rrset in soa_ns_rrsets
-    ]
+def test_remove_soa_and_root_ns(fake_response_data, soa_ns_rrsets):
+    rrsets = fake_response_data['rrsets']
     rrsets_all = rrsets + soa_ns_rrsets
-    expected = rrsets + [soa_ns_rrsets[2]]
-    actual = recon_client._remove_soa_and_root_ns('example.net.', rrsets_all)
+
+    rrsets_expected = rrsets + [soa_ns_rrsets[2]]
+    expected = set(reconciler.ResourceRecordSet(**rr) for rr in rrsets_expected)
+    actual = reconciler.GDNSReconciler.create_rrset_set(
+        'example.net.', rrsets_all)
     assert expected == actual
 
 
@@ -259,29 +255,34 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
 
     mock_get_records_for_zone_called = 0
 
+    return_rrsets = [rrset.copy() for rrset in fake_response_data['rrsets']]
+    return_rrsets[0]['rrdatas'] = ['10.4.5.6']
+    return_rrsets.append(extra_rrset)
+
     async def mock_get_records_for_zone(*args, **kwargs):
         nonlocal mock_get_records_for_zone_called
         mock_get_records_for_zone_called += 1
-        rrsets = fake_response_data['rrsets']
-        rrsets[0]['rrdatas'] = ['10.4.5.6']
-        rrsets.append(extra_rrset)
-        return rrsets
+        return return_rrsets
 
     recon_client.dns_client.get_records_for_zone = mock_get_records_for_zone
 
     input_rrsets = []
-    expected_missing_rrsets = []
-    expected_extra_rrsets = []
+    expected_missing_rrsets = set()
+    expected_extra_rrsets = set()
     if has_desired:
-        input_rrsets = rrsets
-        expected_missing_rrsets = [
+        for rrset in rrsets:
+            input_rrset = rrset.copy()
+            input_rrset['source'] = 'gceauthority'
+            input_rrsets.append(input_rrset)
+
+        expected_missing_rrsets = set(
             reconciler.ResourceRecordSet(**record)
             for record in [rrsets[0], soa_ns_rrsets[2]]
-        ]
-        expected_extra_rrsets = [
+        )
+        expected_extra_rrsets = set(
             reconciler.ResourceRecordSet(**record)
-            for record in [extra_rrset]
-        ]
+            for record in [return_rrsets[0], extra_rrset]
+        )
     actual_missing_rrsets, actual_extra_rrsets = (
         await recon_client.validate_rrsets_by_zone(
             'example.net.', input_rrsets))
