@@ -17,7 +17,6 @@
 import asyncio
 import concurrent.futures
 import datetime
-import json
 import logging
 from unittest import mock
 
@@ -86,17 +85,26 @@ async def test_cleanup(side_effect, gpubsub_publisher_inst, monkeypatch,
 async def test_publish(gpubsub_publisher_inst, publish_completed, mocker):
     """Publish received messages."""
     datetime.datetime = conftest.MockDatetime
-    msg1 = {'action': 'additions', 'resourceRecords': {'name': 'a.b.com.'}}
+    msg1 = {
+        'action': 'additions',
+        'resourceRecords': {
+            'name': 'a.b.com.',
+            'rrdatas': ('10.11.12.13',)
+        }
+    }
 
     expected_num_messages = 0
     if not publish_completed:
         expected_num_messages = 1
-        gpubsub_publisher_inst.publisher.publish.return_value = mocker.Mock()
+        gpubsub_publisher_inst.publisher.publish = mocker.Mock()
 
     await gpubsub_publisher_inst.publish(msg1)
 
     msg1['timestamp'] = datetime.datetime.utcnow().isoformat()
-    bytes_msg1 = bytes(json.dumps(msg1), encoding='utf-8')
+    bytes_msg1 = bytes(
+        '{"action": "additions", "resourceRecords": {"name": "a.b.com.", '
+        '"rrdatas": ["10.11.12.13"]}, "timestamp": "2018-01-01T11:30:00"}',
+        encoding='utf-8')
 
     gpubsub_publisher_inst.publisher.publish.assert_called_once_with(
         gpubsub_publisher_inst.topic, bytes_msg1)
