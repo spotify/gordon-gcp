@@ -1,6 +1,19 @@
 Changelog
 =========
 
+0.0.1.dev32 (2019-02-26)
+------------------------
+
+Changed
+~~~~~~~
+
+* Exit (code=1) on failure to create pubsub subscription.
+
+Fixed
+~~~~~
+
+* Fix reconciler bug introduced in v0.0.1.dev31.
+
 0.0.1.dev31 (2019-02-18)
 ------------------------
 
