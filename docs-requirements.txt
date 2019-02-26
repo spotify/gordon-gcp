@@ -1,7 +1,3 @@
 -e .
 sphinx==1.6.6
 sphinxcontrib-zopeext==0.2.1
-# there is a bugfix in this commit but it hasn't been released yet (as of
-# 2018/8/6); see
-# https://github.com/GoogleCloudPlatform/google-cloud-python/issues/5598
-git+git://github.com/GoogleCloudPlatform/google-cloud-python@861d51a20bddafdce841fc9298caa9bbdf03fa50#egg=google-cloud-pubsub&subdirectory=pubsub
