@@ -37,6 +37,7 @@ import functools
 import json
 import logging
 import os
+import sys
 
 import zope.interface
 from google.api_core import exceptions as google_exceptions
@@ -272,6 +273,7 @@ class GPSEventConsumer:
         self._loop = loop
         self._logger = logging.getLogger('')
         self._max_msg_age = config.get('max_msg_age', 300)
+        self._max_subscribe_retries = config.get('max_subscribe_retries', 2)
 
     async def handle_message(self, event_msg):
         """Ack Pub/Sub message and update event message history.
@@ -366,7 +368,7 @@ class GPSEventConsumer:
         # we're in another thread here separate from the main event loop
         self._loop.call_soon_threadsafe(task)
 
-    def _manage_subs(self):
+    def _manage_subs(self, attempt=0):
         # NOTE: automatically extends deadline in the background;
         #       must `nack()` if can't finish. We don't proactively
         #       `nack` in this plugin since it'll just get redelivered.
@@ -382,9 +384,17 @@ class GPSEventConsumer:
             # we're running in a threadpool because this is blocking
             future.result()
         except Exception as e:
-            self._subscriber.close()
             logging.error(f'Issue polling subscription: {e}', exc_info=e)
-            raise exceptions.GCPGordonError(e)
+            if attempt <= self._max_subscribe_retries:
+                self._manage_subs(attempt=attempt+1)
+            else:
+                # Raising an exception is ignored in the `loop.run_forever()`
+                # https://docs.python.org/3.6/library/asyncio-dev.html#detect-exceptions-never-consumed
+                # but Gordon cannot run if it cannot subscribe, so we hard exit.
+                logging.error(
+                    f'Failed to resubscribe Gordon to {self._subscription} '
+                    f'after {self._max_subscribe_retries} retries, exiting.')
+                sys.exit(1)
 
     async def run(self):
         """Start consuming messages from Google Pub/Sub.
@@ -403,4 +413,4 @@ class GPSEventConsumer:
         #       workers
         executor = concurrent.futures.ThreadPoolExecutor(thread_name_prefix=pfx)
         coro = main_loop.run_in_executor(executor, self._manage_subs)
-        await asyncio.gather(coro, loop=main_loop, return_exceptions=True)
+        await coro
