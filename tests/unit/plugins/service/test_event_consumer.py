@@ -240,23 +240,23 @@ def test_manage_subs(consumer):
     )
 
 
-def test_manage_subs_raises(consumer, caplog):
-    msg = 'foo'
-    exc = Exception(msg)
-    consumer._subscriber.subscribe.return_value.result.side_effect = [exc]
+def test_manage_subs_retries(consumer, caplog, mocker):
+    consumer._subscriber.subscribe.return_value.result.side_effect = [
+        Exception("first"), Exception("second"), mocker.Mock()
+    ]
+    consumer._manage_subs()
+    assert 2 == len(caplog.records)
 
-    with pytest.raises(exceptions.GCPGordonError, match=msg):
-        consumer._manage_subs()
 
-    exp_callback = consumer._schedule_pubsub_msg
-    consumer._subscriber.subscribe.assert_called_once_with(
-        consumer._subscription,
-        exp_callback,
-        flow_control=consumer._flow_control
-    )
-    consumer._subscriber.close.assert_called_once_with()
-
-    assert 1 == len(caplog.records)
+def test_manage_subs_exit_on_failures(consumer, monkeypatch, mocker):
+    consumer._subscriber.subscribe.return_value.result.side_effect = [
+        Exception("first"), Exception("second"), Exception("third")
+    ]
+    mock = mocker.Mock()
+    patch = f'{MOD_PATCH}.sys'
+    monkeypatch.setattr(patch, mock)
+    consumer._manage_subs()
+    mock.exit.assert_called_once_with(1)
 
 
 class CustomLoop:
