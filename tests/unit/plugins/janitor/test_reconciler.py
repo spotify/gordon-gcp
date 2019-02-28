@@ -96,6 +96,21 @@ def test_create_gcp_rrset_raises():
         reconciler.ResourceRecordSet(**missing_params)
 
 
+def test_rrset_inequality(rrset_dict):
+    other_rrset_dict = rrset_dict.copy()
+    other_rrset_dict['name'] = 'someothername.com.'
+    rrset = reconciler.ResourceRecordSet(**rrset_dict)
+    other_rrset = reconciler.ResourceRecordSet(**other_rrset_dict)
+    assert rrset != other_rrset
+
+
+def test_rrset_repr(rrset_dict):
+    rrset = reconciler.ResourceRecordSet(**rrset_dict)
+    expected = ("{'name': 'test', 'type': 'A', 'rrdatas': ('10.1.2.3',), "
+                "'kind': 'dns#resourceRecordSet', 'ttl': 500, 'source': None}")
+    assert expected == repr(rrset)
+
+
 args = 'timeout,exp_timeout'
 params = [
     (None, 60),
