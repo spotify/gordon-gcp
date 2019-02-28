@@ -245,13 +245,29 @@ def extra_rrset():
     }
 
 
-@pytest.mark.parametrize('has_desired', [True, False])
+@pytest.fixture
+def duplicate_rrset(soa_ns_rrsets):
+    dupe = soa_ns_rrsets[2].copy()
+    dupe['source'] = 'someotherauthority'
+    return dupe
+
+
+@pytest.mark.parametrize('has_desired,has_someotherauthority', [
+    (True, True),
+    (True, False),
+    (False, False)])
 @pytest.mark.asyncio
 async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
                                        soa_ns_rrsets, extra_rrset, has_desired,
-                                       caplog, monkeypatch):
+                                       caplog, monkeypatch, duplicate_rrset,
+                                       has_someotherauthority):
     """Differences are detected and returned."""
     rrsets = fake_response_data['rrsets'] + soa_ns_rrsets
+    expected_missing_rrset = rrsets[0]
+    if has_someotherauthority:
+        rrsets = [duplicate_rrset] + rrsets
+    else:
+        rrsets = rrsets + [duplicate_rrset]
 
     mock_get_records_for_zone_called = 0
 
@@ -272,12 +288,12 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
     if has_desired:
         for rrset in rrsets:
             input_rrset = rrset.copy()
-            input_rrset['source'] = 'gceauthority'
+            input_rrset['source'] = rrset.get('source', 'gceauthority')
             input_rrsets.append(input_rrset)
 
         expected_missing_rrsets = set(
             reconciler.ResourceRecordSet(**record)
-            for record in [rrsets[0], soa_ns_rrsets[2]]
+            for record in [expected_missing_rrset, soa_ns_rrsets[2]]
         )
         expected_extra_rrsets = set(
             reconciler.ResourceRecordSet(**record)
