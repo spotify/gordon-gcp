@@ -241,7 +241,8 @@ def extra_rrset():
         'type': 'A',
         'ttl': 300,
         'rrdatas': ['1.2.3.255'],
-        'kind': 'dns#resourceRecordSet'
+        'kind': 'dns#resourceRecordSet',
+        'source': 'gdns'
     }
 
 
@@ -271,7 +272,11 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
 
     mock_get_records_for_zone_called = 0
 
-    return_rrsets = [rrset.copy() for rrset in fake_response_data['rrsets']]
+    return_rrsets = []
+    for rrset in fake_response_data['rrsets']:
+        rr = rrset.copy()
+        rr['source'] = 'gdns'
+        return_rrsets.append(rr)
     return_rrsets[0]['rrdatas'] = ['10.4.5.6']
     return_rrsets.append(extra_rrset)
 
@@ -364,6 +369,7 @@ async def test_run(msg, exp_log_records, exp_mock_calls, qsize, additions,
             [mock.call(
                 'rrsets-handled', additions, context=context)])
     if deletions:
+        context['source'] = 'gdns'
         context['action'] = 'deletions'
         recon_client.metrics._set_mock.assert_has_calls(
             [mock.call(
