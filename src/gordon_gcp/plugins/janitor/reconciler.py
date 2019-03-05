@@ -296,12 +296,13 @@ class GDNSReconciler:
         return zone, rrsets
 
     @staticmethod
-    def create_rrset_set(zone, rrsets):
+    def create_rrset_set(zone, rrsets, source=None):
         """Create a set of ResourceRecordSets excluding SOA and zone's NS.
 
         Args:
             zone (str): zone of the rrsets, for NS record exclusion.
             rrsets (list(dict)): collection of dict representation of RRSets.
+            source (str): (optional) source to add to the rrset
 
         Returns:
             set of :class:`ResourceRecordSet`
@@ -312,6 +313,8 @@ class GDNSReconciler:
             typeStr = rrset['type']
             if typeStr == 'SOA' or (typeStr == 'NS' and name == zone):
                 continue
+            if source:
+                rrset['source'] = source
             rrset_set.add(ResourceRecordSet(**rrset))
         return rrset_set
 
@@ -334,7 +337,7 @@ class GDNSReconciler:
 
         desired_rrsets = self.create_rrset_set(zone, rrsets)
         actual_rrsets = self.create_rrset_set(
-            zone, await self.dns_client.get_records_for_zone(zone))
+            zone, await self.dns_client.get_records_for_zone(zone), 'gdns')
 
         missing_rrsets = desired_rrsets - actual_rrsets
         # TODO: This should eventually also emit an actual metric.
