@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev33 (2020-04-17)
+------------------------
+
+Changed
+~~~~~~~
+
+* Widen regex in auditlog schema to work with more use cases.
+
 0.0.1.dev32 (2019-02-26)
 ------------------------
 

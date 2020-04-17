@@ -23,7 +23,7 @@
                     "examples": [
                         "projects/a-project-id/zones/a-zone-name/instances/an-instance-name"
                     ],
-                    "pattern": "^projects/[0-9]+/zones/[a-z\\-0-9]+/instances/[a-z\\-0-9]+"
+                    "pattern": "^projects/([0-9]+|[a-z][a-z\\-0-9]{5,29})/zones/[a-z\\-0-9]+/instances/[a-z\\-0-9]+"
                 }
             },
             "required": ["methodName", "resourceName"]

@@ -96,6 +96,21 @@ def test_create_gcp_rrset_raises():
         reconciler.ResourceRecordSet(**missing_params)
 
 
+def test_rrset_inequality(rrset_dict):
+    other_rrset_dict = rrset_dict.copy()
+    other_rrset_dict['name'] = 'someothername.com.'
+    rrset = reconciler.ResourceRecordSet(**rrset_dict)
+    other_rrset = reconciler.ResourceRecordSet(**other_rrset_dict)
+    assert rrset != other_rrset
+
+
+def test_rrset_repr(rrset_dict):
+    rrset = reconciler.ResourceRecordSet(**rrset_dict)
+    expected = ("{'name': 'test', 'type': 'A', 'rrdatas': ('10.1.2.3',), "
+                "'kind': 'dns#resourceRecordSet', 'ttl': 500, 'source': None}")
+    assert expected == repr(rrset)
+
+
 args = 'timeout,exp_timeout'
 params = [
     (None, 60),
@@ -241,21 +256,42 @@ def extra_rrset():
         'type': 'A',
         'ttl': 300,
         'rrdatas': ['1.2.3.255'],
-        'kind': 'dns#resourceRecordSet'
+        'kind': 'dns#resourceRecordSet',
+        'source': 'gdns'
     }
 
 
-@pytest.mark.parametrize('has_desired', [True, False])
+@pytest.fixture
+def duplicate_rrset(soa_ns_rrsets):
+    dupe = soa_ns_rrsets[2].copy()
+    dupe['source'] = 'someotherauthority'
+    return dupe
+
+
+@pytest.mark.parametrize('has_desired,has_someotherauthority', [
+    (True, True),
+    (True, False),
+    (False, False)])
 @pytest.mark.asyncio
 async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
                                        soa_ns_rrsets, extra_rrset, has_desired,
-                                       caplog, monkeypatch):
+                                       caplog, monkeypatch, duplicate_rrset,
+                                       has_someotherauthority):
     """Differences are detected and returned."""
     rrsets = fake_response_data['rrsets'] + soa_ns_rrsets
+    expected_missing_rrset = rrsets[0]
+    if has_someotherauthority:
+        rrsets = [duplicate_rrset] + rrsets
+    else:
+        rrsets = rrsets + [duplicate_rrset]
 
     mock_get_records_for_zone_called = 0
 
-    return_rrsets = [rrset.copy() for rrset in fake_response_data['rrsets']]
+    return_rrsets = []
+    for rrset in fake_response_data['rrsets']:
+        rr = rrset.copy()
+        rr['source'] = 'gdns'
+        return_rrsets.append(rr)
     return_rrsets[0]['rrdatas'] = ['10.4.5.6']
     return_rrsets.append(extra_rrset)
 
@@ -272,12 +308,12 @@ async def test_validate_rrsets_by_zone(recon_client, fake_response_data,
     if has_desired:
         for rrset in rrsets:
             input_rrset = rrset.copy()
-            input_rrset['source'] = 'gceauthority'
+            input_rrset['source'] = rrset.get('source', 'gceauthority')
             input_rrsets.append(input_rrset)
 
         expected_missing_rrsets = set(
             reconciler.ResourceRecordSet(**record)
-            for record in [rrsets[0], soa_ns_rrsets[2]]
+            for record in [expected_missing_rrset, soa_ns_rrsets[2]]
         )
         expected_extra_rrsets = set(
             reconciler.ResourceRecordSet(**record)
@@ -348,6 +384,7 @@ async def test_run(msg, exp_log_records, exp_mock_calls, qsize, additions,
             [mock.call(
                 'rrsets-handled', additions, context=context)])
     if deletions:
+        context['source'] = 'gdns'
         context['action'] = 'deletions'
         recon_client.metrics._set_mock.assert_has_calls(
             [mock.call(
