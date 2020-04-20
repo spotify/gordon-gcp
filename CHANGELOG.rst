@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev34 (2020-04-20)
+------------------------
+
+Changed
+~~~~~~~
+
+* Fallback to default token URI if not set.
+
 0.0.1.dev33 (2020-04-17)
 ------------------------
 
