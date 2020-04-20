@@ -141,7 +141,10 @@ class GAuthClient:
         return session
 
     def _setup_token_request(self):
-        url = self.creds._token_uri
+        if hasattr(self.creds, '_token_uri'):
+            url = self.creds._token_uri
+        else:
+            url = _utils.DEFAULT_TOKEN_URI
 
         headers = _utils.DEFAULT_REQUEST_HEADERS.copy()
         headers.update(
