@@ -52,11 +52,14 @@ To use:
 import asyncio
 import json
 import logging
+import os
 import urllib.parse
 import uuid
 
 import aiohttp
 from google import auth as gauth
+from google.auth import compute_engine
+from google.auth import environment_vars
 from google.oauth2 import _client
 from google.oauth2 import service_account
 
@@ -101,6 +104,13 @@ class GAuthClient:
         self.token = None
         self.expiry = None  # UTC time
 
+        if isinstance(self.creds, compute_engine.credentials.Credentials):
+            self._refresh_token_f = \
+                self._refresh_token_using_compute_credentials
+        else:
+            self._refresh_token_f = \
+                self._refresh_token_using_service_account_credentials
+
     def _load_keyfile(self, keyfile):
         if not keyfile:
             return None
@@ -141,10 +151,7 @@ class GAuthClient:
         return session
 
     def _setup_token_request(self):
-        if hasattr(self.creds, '_token_uri'):
-            url = self.creds._token_uri
-        else:
-            url = _utils.DEFAULT_TOKEN_URI
+        url = self.creds._token_uri
 
         headers = _utils.DEFAULT_REQUEST_HEADERS.copy()
         headers.update(
@@ -178,14 +185,31 @@ class GAuthClient:
                 specifically a :exc:`.GCPHTTPResponseError`, if the
                 exception is associated with a response status code.
         """
+        await self._refresh_token_f()
+
+    async def _refresh_token_using_compute_credentials(self):
+        metadata_host = os.getenv(environment_vars.GCE_METADATA_ROOT,
+                                  'metadata.google.internal')
+        url = (f'http://{metadata_host}/computeMetadata/'
+               'v1/instance/service-accounts/'
+               f'{self.creds._service_account_email}/token')
+        headers = {'metadata-flavor', 'google'}
+        await self._execute_refresh_token_request(url, 'GET', headers)
+
+    async def _refresh_token_using_service_account_credentials(self):
         url, headers, body = self._setup_token_request()
+        await self._execute_refresh_token_request(url, 'POST', headers, body)
+
+    async def _execute_refresh_token_request(
+            self, url, method, headers, body=None):
         request_id = uuid.uuid4()
         logging.debug(_utils.REQ_LOG_FMT.format(
-            request_id=request_id, method='POST', url=url, kwargs=None))
-        async with self._session.post(url, headers=headers, data=body) as resp:
+            request_id=request_id, method=method, url=url, kwargs=None))
+        async with self._session.request(
+                method, url, headers=headers, data=body) as resp:
             log_kw = {
                 'request_id': request_id,
-                'method': 'POST',
+                'method': method,
                 'url': resp.url,
                 'status': resp.status,
                 'reason': resp.reason,

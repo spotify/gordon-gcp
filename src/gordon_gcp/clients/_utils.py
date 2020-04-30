@@ -24,7 +24,6 @@ DEFAULT_REQUEST_HEADERS = {
     'Accept-Encoding': 'gzip',
     'User-Agent': 'custom-aiohttp-gcloud-python',
 }
-DEFAULT_TOKEN_URI = "https://www.googleapis.com/oauth2/v4/token"
 
 # aiohttp does not log client request/responses; mimicking
 # `requests` log format
