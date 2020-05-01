@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev35 (2020-04-30)
+------------------------
+
+Changed
+~~~~~~~
+
+* Support compute engine credentials when refreshing token.
+
 0.0.1.dev34 (2020-04-20)
 ------------------------
 

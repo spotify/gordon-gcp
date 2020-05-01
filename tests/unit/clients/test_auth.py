@@ -23,6 +23,7 @@ import aiohttp
 import pytest
 from aioresponses import aioresponses
 from google import auth as gauth
+from google.auth import compute_engine
 from google.oauth2 import _client as oauth_client
 from google.oauth2 import credentials
 from google.oauth2 import service_account
@@ -49,6 +50,19 @@ def mock_oauth2_credentials(mocker, monkeypatch, fake_keyfile_data):
     sa_creds._client_secret = '_client_secret'
 
     mock_creds.default.return_value = sa_creds, ''
+
+    patch = 'gordon_gcp.clients.auth.gauth'
+    monkeypatch.setattr(patch, mock_creds)
+    return mock_creds
+
+
+@pytest.fixture
+def mock_compute_engine_credentials(mocker, monkeypatch, fake_keyfile_data):
+    mock_creds = mocker.MagicMock(gauth)
+
+    ce_creds = mocker.MagicMock(compute_engine.credentials.Credentials)
+    ce_creds._service_account_email = 'default'
+    mock_creds.default.return_value = ce_creds, ''
 
     patch = 'gordon_gcp.clients.auth.gauth'
     monkeypatch.setattr(patch, mock_creds)
@@ -221,6 +235,13 @@ async def client_with_app_default_cred(session, mock_oauth2_credentials):
     await session.close()
 
 
+@pytest.fixture
+async def client_with_compute_engine_cred(session,
+                                          mock_compute_engine_credentials):
+    yield auth.GAuthClient(session=session)
+    await session.close()
+
+
 @pytest.mark.asyncio
 async def test_refresh_token(client, fake_keyfile_data, mock_parse_expiry,
                              caplog, payload_resp_refresh_token):
@@ -249,6 +270,21 @@ async def test_refresh_token_with_app_default_cred(client_with_app_default_cred,
                     payload=payload_resp_refresh_token)
         await client_with_app_default_cred.refresh_token()
     assert token == client_with_app_default_cred.token
+    assert 2 == len(caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_with_compute_engine_cred(
+        client_with_compute_engine_cred, mock_parse_expiry,
+        caplog, payload_resp_refresh_token):
+    """Successfully refresh access token with compute engine credentials ."""
+    url = ('http://metadata.google.internal/'
+           'computeMetadata/v1/instance/service-accounts/default/token')
+    token = 'c0ffe3'
+    with aioresponses() as mocked:
+        mocked.get(url, status=200, payload=payload_resp_refresh_token)
+        await client_with_compute_engine_cred.refresh_token()
+    assert token == client_with_compute_engine_cred.token
     assert 2 == len(caplog.records)
 
 
