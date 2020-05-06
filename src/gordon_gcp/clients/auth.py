@@ -190,17 +190,30 @@ class GAuthClient:
     async def _refresh_token_using_compute_credentials(self):
         metadata_host = os.getenv(environment_vars.GCE_METADATA_ROOT,
                                   'metadata.google.internal')
-        url = (f'http://{metadata_host}/computeMetadata/'
-               'v1/instance/service-accounts/'
-               f'{self.creds._service_account_email}/token')
-        headers = {'metadata-flavor', 'google'}
-        await self._execute_refresh_token_request(url, 'GET', headers)
+
+        headers = {'Metadata-Flavor': 'Google'}
+        sa_url = (f'http://{metadata_host}/computeMetadata/'
+                  'v1/instance/service-accounts/'
+                  f'{self.creds._service_account_email}/'
+                  '?recursive=true')
+
+        sa_response = await self._execute_request(sa_url, 'GET', headers)
+        email = (sa_response['email']
+                 if 'email' in sa_response
+                 else self.creds._service_account_email)
+
+        token_url = (f'http://{metadata_host}/computeMetadata/'
+                     'v1/instance/service-accounts/'
+                     f'{email}/token')
+        token_response = await self._execute_request(token_url, 'GET', headers)
+        self._handle_refresh_token_response(token_response)
 
     async def _refresh_token_using_service_account_credentials(self):
         url, headers, body = self._setup_token_request()
-        await self._execute_refresh_token_request(url, 'POST', headers, body)
+        response = await self._execute_request(url, 'POST', headers, body)
+        self._handle_refresh_token_response(response)
 
-    async def _execute_refresh_token_request(
+    async def _execute_request(
             self, url, method, headers, body=None):
         request_id = uuid.uuid4()
         logging.debug(_utils.REQ_LOG_FMT.format(
@@ -224,12 +237,14 @@ class GAuthClient:
                 logging.error(msg, exc_info=e)
                 raise exceptions.GCPHTTPResponseError(msg, resp.status)
 
-            response = await resp.json()
-            try:
-                self.token = response['access_token']
-            except KeyError:
-                msg = '[{request_id}] No access token in response.'
-                logging.error(msg)
-                raise exceptions.GCPAuthError(msg)
+            return await resp.json()
+
+    def _handle_refresh_token_response(self, response):
+        try:
+            self.token = response['access_token']
+        except KeyError:
+            msg = '[{request_id}] No access token in response.'
+            logging.error(msg)
+            raise exceptions.GCPAuthError(msg)
 
         self.expiry = _client._parse_expiry(response)
