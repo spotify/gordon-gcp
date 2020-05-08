@@ -278,14 +278,18 @@ async def test_refresh_token_with_compute_engine_cred(
         client_with_compute_engine_cred, mock_parse_expiry,
         caplog, payload_resp_refresh_token):
     """Successfully refresh access token with compute engine credentials ."""
-    url = ('http://metadata.google.internal/'
-           'computeMetadata/v1/instance/service-accounts/default/token')
+    sa_url = ('http://metadata.google.internal/'
+              'computeMetadata/v1/instance/service-accounts/default/'
+              '?recursive=true')
+    token_url = ('http://metadata.google.internal/'
+                 'computeMetadata/v1/instance/service-accounts/default/token')
     token = 'c0ffe3'
     with aioresponses() as mocked:
-        mocked.get(url, status=200, payload=payload_resp_refresh_token)
+        mocked.get(sa_url, status=200, payload={'email': 'default'})
+        mocked.get(token_url, status=200, payload=payload_resp_refresh_token)
         await client_with_compute_engine_cred.refresh_token()
     assert token == client_with_compute_engine_cred.token
-    assert 2 == len(caplog.records)
+    assert 4 == len(caplog.records)
 
 
 args = 'status,payload,exc,err_msg'
