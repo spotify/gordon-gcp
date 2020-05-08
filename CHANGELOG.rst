@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.1.dev36 (2020-05-08)
+------------------------
+
+Changed
+~~~~~~~
+
+* Ensure to use correct email when calling metadata token url
+
 0.0.1.dev35 (2020-04-30)
 ------------------------
 
