@@ -198,9 +198,10 @@ class GAuthClient:
                   '?recursive=true')
 
         sa_response = await self._execute_request(sa_url, 'GET', headers)
-        email = (sa_response['email']
-                 if 'email' in sa_response
-                 else self.creds._service_account_email)
+        if 'email' in sa_response:
+            email = sa_response['email']
+        else:
+            email = self.creds._service_account_email
 
         token_url = (f'http://{metadata_host}/computeMetadata/'
                      'v1/instance/service-accounts/'
@@ -240,9 +241,9 @@ class GAuthClient:
             return await resp.json()
 
     def _handle_refresh_token_response(self, response):
-        try:
+        if 'access_token' in response:
             self.token = response['access_token']
-        except KeyError:
+        else:
             msg = '[{request_id}] No access token in response.'
             logging.error(msg)
             raise exceptions.GCPAuthError(msg)
