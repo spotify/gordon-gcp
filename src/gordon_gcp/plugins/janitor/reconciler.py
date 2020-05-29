@@ -128,14 +128,7 @@ class GDNSReconcilerBuilder:
         self.kwargs = kwargs
 
     def _validate_config(self):
-        # req keys: keyfile, project, topic
-        # TODO (lynn): keyfile won't be required once we support other
-        #              auth methods
-        if not self.config.get('keyfile'):
-            msg = ('The path to a Service Account JSON keyfile is required to '
-                   'authenticate for Google Cloud Pub/Sub.')
-            logging.error(msg)
-            raise exceptions.GCPConfigError(msg)
+        # req keys: project
         if not self.config.get('project'):
             msg = 'The GCP project where Cloud DNS is located is required.'
             logging.error(msg)
@@ -143,7 +136,8 @@ class GDNSReconcilerBuilder:
 
     def _init_auth(self):
         return auth.GAuthClient(
-            keyfile=self.config['keyfile'], scopes=self.config.get('scopes'))
+            keyfile=self.config.get('keyfile'),
+            scopes=self.config.get('scopes'))
 
     def _init_client(self, auth_client):
         kwargs = {

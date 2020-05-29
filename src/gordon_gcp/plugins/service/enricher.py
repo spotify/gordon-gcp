@@ -61,13 +61,6 @@ class GCEEnricherBuilder:
         self.http_client = self._init_http_client()
         self.dns_client = self._init_dns_client()
 
-    def _validate_keyfile(self):
-        msg = []
-        if not self.config.get('keyfile'):
-            msg.append('The path to a Service Account JSON keyfile is required '
-                       'to authenticate to the GCE API.')
-        return msg
-
     def _validate_dns_zone(self):
         msg = []
         if not self.config.get('dns_zone'):
@@ -97,7 +90,6 @@ class GCEEnricherBuilder:
             list(str): Error messages from the validators.
         """
         msg = []
-        msg.extend(self._validate_keyfile())
         msg.extend(self._validate_dns_zone())
         msg.extend(self._validate_retries())
         msg.extend(self._validate_project())
@@ -114,7 +106,7 @@ class GCEEnricherBuilder:
 
     def _init_auth(self):
         scopes = self.config.get('scopes')
-        return auth.GAuthClient(keyfile=self.config['keyfile'],
+        return auth.GAuthClient(keyfile=self.config.get('keyfile'),
                                 scopes=scopes)
 
     def _init_http_client(self):

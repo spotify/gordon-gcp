@@ -52,7 +52,6 @@ def test_get_gpubsub_publisher(local, timeout, exp_timeout, topic, config,
 
 
 @pytest.mark.parametrize('config_key,exp_msg', [
-    ('keyfile', 'The path to a Service Account JSON keyfile is required '),
     ('project', 'The GCP project where Cloud Pub/Sub is located is required.'),
     ('topic', ('A topic for the client to publish to in Cloud Pub/Sub is '
                'required.')),
@@ -130,7 +129,6 @@ def test_get_reconciler(timeout, exp_timeout, config, auth_client, monkeypatch,
 
 
 @pytest.mark.parametrize('key,error_msg', [
-    ('keyfile', 'The path to a Service Account JSON keyfile is required '),
     ('project', 'The GCP project where Cloud DNS is located is required.')
 ])
 def test_get_reconciler_config_raises(key, error_msg, config, auth_client,
@@ -163,7 +161,6 @@ async def test_get_authority(authority_config, auth_client, metrics):
 
 
 @pytest.mark.parametrize('config_key,error_msg', [
-    ('keyfile', 'The path to a Service Account JSON keyfile is required '),
     ('dns_zone', 'The absolute DNS zone, i.e. "example.com.", is required ')])
 def test_get_authority_config_raises(caplog, config_key, error_msg,
                                      authority_config, auth_client, metrics):

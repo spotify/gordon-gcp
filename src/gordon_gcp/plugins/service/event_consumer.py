@@ -121,14 +121,7 @@ class GPSEventConsumerBuilder:
 
     def _validate_config(self):
         errors = []
-        # req keys: keyfile, project, topic, subscription
-        # TODO (lynn): keyfile won't be required once we support other
-        #              auth methods
-        if not self.config.get('keyfile'):
-            msg = ('The path to a Service Account JSON keyfile is required to '
-                   'authenticate for Google Cloud Pub/Sub.')
-            errors.append(msg)
-
+        # req keys: project, topic, subscription
         if not self.config.get('project'):
             msg = ('The GCP project where Cloud Pub/Sub is located is '
                    'required.')
@@ -180,7 +173,8 @@ class GPSEventConsumerBuilder:
             # uses it but without it aiohttp will complain about an unclosed
             # client session that would otherwise be made by default
             auth_client = auth.GAuthClient(
-                keyfile=self.config['keyfile'], scopes=scopes, session='noop')
+                keyfile=self.config.get('keyfile'),
+                scopes=scopes, session='noop')
         return auth_client
 
     def _init_subscriber_client(self, auth_client):

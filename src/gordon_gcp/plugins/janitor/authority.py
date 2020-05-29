@@ -89,12 +89,6 @@ class GCEAuthorityBuilder:
                              blacklisted_metadata=metadata_blacklist)
 
     def _validate_config(self):
-        if not self.config.get('keyfile'):
-            msg = ('The path to a Service Account JSON keyfile is required to '
-                   'authenticate to Google Compute Engine and Cloud '
-                   'Resource Manager.')
-            logging.error(msg)
-            raise exceptions.GCPConfigError(msg)
         if not self.config.get('dns_zone'):
             msg = ('The absolute DNS zone, i.e. "example.com.", is required to '
                    'identify to which zone generated records should belong.')
@@ -103,7 +97,7 @@ class GCEAuthorityBuilder:
 
     def build_authority(self):
         self._validate_config()
-        keyfile_path = self.config['keyfile']
+        keyfile_path = self.config.get('keyfile')
         scopes = self.config.get('scopes')
         self.session = aiohttp.ClientSession()
         crm_client = self._get_crm_client(keyfile_path, scopes)
