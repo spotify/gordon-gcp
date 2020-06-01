@@ -90,14 +90,7 @@ class GPubsubPublisherBuilder:
         self.kwargs = kwargs
 
     def _validate_config(self):
-        # req keys: keyfile, project, topic
-        # TODO (lynn): keyfile won't be required once we support other
-        #              auth methods
-        if not self.config.get('keyfile'):
-            msg = ('The path to a Service Account JSON keyfile is required to '
-                   'authenticate for Google Cloud Pub/Sub.')
-            logging.error(msg)
-            raise exceptions.GCPConfigError(msg)
+        # req keys: project, topic
         if not self.config.get('project'):
             msg = 'The GCP project where Cloud Pub/Sub is located is required.'
             logging.error(msg)
@@ -125,7 +118,8 @@ class GPubsubPublisherBuilder:
             # uses it but without it aiohttp will complain about an unclosed
             # client session that would otherwise be made by default
             auth_client = auth.GAuthClient(
-                keyfile=self.config['keyfile'], scopes=scopes, session='noop')
+                keyfile=self.config.get('keyfile'),
+                scopes=scopes, session='noop')
         return auth_client
 
     def _init_client(self, auth_client):

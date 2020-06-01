@@ -57,20 +57,11 @@ class GDNSPublisherBuilder:
         self.metrics = metrics
         self.kwargs = kwargs
         self.validate_config_funcs = [
-            self._validate_keyfile,
             self._validate_project,
             self._validate_dns_zone,
             self._validate_publish_timeout,
             self._validate_default_ttl
         ]
-
-    def _validate_keyfile(self, errors):
-        # TODO (lynn): keyfile won't be required once we support other
-        #              auth methods
-        if not self.config.get('keyfile'):
-            msg = ('The path to a Service Account JSON keyfile is required to '
-                   'authenticate for Google Cloud DNS.')
-            errors.append(msg)
 
     def _validate_project(self, errors):
         if not self.config.get('project'):
@@ -126,7 +117,7 @@ class GDNSPublisherBuilder:
     def _init_auth_client(self):
         scopes = self.config.get('scopes')
         return auth.GAuthClient(
-            keyfile=self.config['keyfile'], scopes=scopes)
+            keyfile=self.config.get('keyfile'), scopes=scopes)
 
     def _init_dns_client(self):
         auth_client = self._init_auth_client()

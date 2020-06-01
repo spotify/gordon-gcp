@@ -270,7 +270,6 @@ async def test_refresh_token_with_app_default_cred(client_with_app_default_cred,
                     payload=payload_resp_refresh_token)
         await client_with_app_default_cred.refresh_token()
     assert token == client_with_app_default_cred.token
-    assert 2 == len(caplog.records)
 
 
 @pytest.mark.asyncio
