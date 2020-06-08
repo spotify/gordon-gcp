@@ -111,7 +111,6 @@ def test_get_event_consumer(local, provide_loop, topic, sub, consumer_config,
 
 
 @pytest.mark.parametrize('config_key,exp_msg',  [
-    ('keyfile', 'The path to a Service Account JSON keyfile is required '),
     ('project', 'The GCP project where Cloud Pub/Sub is located is required.'),
     ('topic', ('A topic for the client to subscribe to in Cloud Pub/Sub is '
                'required.')),
@@ -256,8 +255,6 @@ def test_get_enricher(mocker, enricher_config, auth_client, conf_retries,
 
 
 @pytest.mark.parametrize('config_key,exc_msg', [
-    ('keyfile', 'The path to a Service Account JSON keyfile is required to '
-                'authenticate to the GCE API.'),
     ('dns_zone', 'A dns zone is required to build correct A records.'),
     ('project', 'The GCP project that contains the Google Cloud DNS managed '
                 'zone is required to correctly delete A records for deleted '
@@ -330,16 +327,10 @@ def test_get_gdns_publisher(conf_key, conf_value, expected, mocker,
 
 
 @pytest.mark.parametrize('conf_keys,exp_msg_snip', (
-    (('keyfile',), ('The path to a Service Account JSON keyfile is required '
-                    'to authenticate for Google Cloud DNS.')),
     (('project',), 'The GCP project where Cloud DNS is located is required.'),
     (('dns_zone',), 'A dns zone is required to build correct A records.'),
     (('default_ttl',), ('A default TTL in seconds must be set for publishing '
                         'records to Google Cloud DNS.')),
-    (('keyfile', 'project'), ('The path to a Service Account JSON keyfile is '
-                              'required to authenticate for Google Cloud DNS.\n'
-                              'The GCP project where Cloud DNS is located is '
-                              'required.\n'))
 ))
 def test_get_gdns_publisher_raises(conf_keys, exp_msg_snip,
                                    publisher_config, mocker, auth_client,
