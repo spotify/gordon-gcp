@@ -35,6 +35,9 @@ To use:
     client = AIOConnection(auth_client=auth_client)
     resp = await client.request('get', 'http://api.example.com/foo')
 
+
+The keyfile is optional.
+If not provided the default service account will be used.
 """
 
 import datetime
