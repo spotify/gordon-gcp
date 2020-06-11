@@ -52,6 +52,10 @@ To use:
         loop.run_until_complete(publisher.start())
     finally:
         loop.close()
+
+
+The keyfile is optional.
+If not provided the default service account will be used.
 """
 
 import asyncio

@@ -32,12 +32,6 @@ Plugin Configuration
 ``[gcp]``
 ~~~~~~~~~
 
-.. option:: keyfile="/path/to/keyfile.json"
-
-    `Required`: Path to the Service Account JSON keyfile to use while authenticating against Google APIs.
-
-    While one global key for all plugins is supported, it's advised to create a key per plugin with only the permissions it requires. To setup a service account, follow `Google's docs on creating & managing service account keys <keyfiles>`_.
-
 .. option:: project="STR"
 
     `Required`: Google Project ID which hosts the relevant GCP services (e.g. Cloud DNS, Pub/Sub, Compute Engine).
@@ -50,11 +44,17 @@ Plugin Configuration
 
     Note: this is separate from Google's 'managed zone' names.  Google uses custom string names with specific `requirements <https://cloud.google.com/dns/api/v1/managedZones#resource>`_ for storing records. Gordon requires that managed zone names be based on DNS names. For all domains, remove the trailing dot and replace all other dots with dashes.  For reverse records, then use only the two most significant octets, prepended with 'reverse-'.  (E.g. ``foo.bar.com.`` -> ``foo-bar-com`` and ``0.168.192.in-addr.arpa.`` -> ``reverse-168-192.``)
 
+.. option:: keyfile="/path/to/keyfile.json"
+
+    `Optional`: Path to the Service Account JSON keyfile to use while authenticating against Google APIs. If not provided the default Service Account will be used instead.
+
+    While one global key for all plugins is supported, it's advised to create a key per plugin with only the permissions it requires. To setup a service account, follow `Google's docs on creating & managing service account keys <keyfiles>`_.
+
 .. option:: default_zone_prefix="STR"
 
     `Optional`: Prefix associated with Google managed zone names, prepended with a '-' to the generated name.
     For example prefix "production" will produced a managed zone name of "production-example-com" for the
-    "example.com." DNS zone. 
+    "example.com." DNS zone.
 
 
 ``[gcp.event_consumer]``
