@@ -31,8 +31,9 @@ from tests.unit import conftest
 #####
 # Tests for simple client instantiation
 #####
+@pytest.mark.asyncio
 @pytest.mark.parametrize('provide_session', [True, False])
-def test_http_client_default(provide_session, mocker):
+async def test_http_client_default(provide_session, mocker):
     """AIOConnection is created with expected attributes."""
     session = None
     if provide_session:
@@ -51,15 +52,15 @@ def test_http_client_default(provide_session, mocker):
         assert auth_client._session is client._session
         assert session is not client._session
 
-    client._session.close()
+    await auth_client._session.close()
 
 
 @pytest.fixture
-def client(mocker, auth_client):
+async def client(mocker, auth_client):
     session = aiohttp.ClientSession()
     client = http.AIOConnection(auth_client=auth_client, session=session)
     yield client
-    session.close()
+    await session.close()
 
 
 args = 'token,expiry,is_valid_token_expected'
@@ -119,7 +120,8 @@ async def test_request(client, monkeypatch, caplog):
     assert resp == resp_text
 
     assert 1 == mock_refresh_token_called
-    request = mocked.requests[('get', conftest.API_URL)][0]
+    assert 1 == len(mocked.requests)
+    request = mocked.requests.popitem()[1][0]
     authorization_header = request.kwargs['headers']['Authorization']
     assert authorization_header == f'Bearer {client._auth_client.token}'
     assert 2 == len(caplog.records)
