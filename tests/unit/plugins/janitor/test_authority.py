@@ -72,7 +72,7 @@ async def test_builder_creates_proper_authority(
     try:
         gce_authority = builder.build_authority()
     finally:
-        builder.session.close()
+        await builder.session.close()
 
     auth_client_calls = [
         mocker.call(
