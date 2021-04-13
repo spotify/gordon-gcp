@@ -93,8 +93,3 @@ class TestGCRMClient:
         expected_rsp = crm_one_page_rsp['projects']
         expected_rsp.append(page2['projects'].pop(0))
         assert expected_rsp == results
-        # assert requests made and their sequence
-        requests = list(m.requests.keys())
-        assert 2 == len(requests)
-        assert ('get', url_with_pagesize) == requests[0]
-        assert ('get', url_with_token) == requests[1]

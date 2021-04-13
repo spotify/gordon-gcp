@@ -29,7 +29,7 @@ logging.getLogger('asyncio').setLevel(logging.WARNING)
 
 
 @pytest.fixture
-def client(mocker, create_mock_coro):
+async def client(mocker, create_mock_coro):
     auth_client = mocker.Mock(auth.GAuthClient)
     creds = mocker.Mock()
     auth_client.creds = creds
@@ -48,7 +48,7 @@ def client(mocker, create_mock_coro):
     client._request_post_mock = request_post_mock
     yield client
     # test teardown
-    client._session.close()
+    await client._session.close()
 
 
 def test_dns_client_default(client):

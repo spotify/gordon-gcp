@@ -180,13 +180,8 @@ async def test_cleanup(exp_log_records, timeout, recon_client, caplog, mocker,
     await recon_client.cleanup()
 
     assert exp_log_records == len(caplog.records)
-    if exp_log_records == 2:
-        # it's in a cancelling state which can't be directly tested
-        assert not coro1.done()
-        assert not coro2.done()
-    else:
-        assert coro1.done()
-        assert coro2.done()
+    assert coro1.done()
+    assert coro2.done()
 
     assert 1 == recon_client.changes_channel.qsize()
 

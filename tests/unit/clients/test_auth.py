@@ -198,7 +198,8 @@ def test_auth_client_raises_not_found(tmpdir, caplog):
     assert 1 == len(caplog.records)
 
 
-def test_auth_client_initialize_app_default_cred(
+@pytest.mark.asyncio
+async def test_auth_client_initialize_app_default_cred(
         monkeypatch, app_default_cred_file_content,
         tmpdir, mock_oauth2_credentials):
     """Test credentials is initialize
@@ -210,6 +211,7 @@ def test_auth_client_initialize_app_default_cred(
     client = auth.GAuthClient()
     assert isinstance(client.creds, credentials.Credentials)
     assert not isinstance(client.creds, service_account.Credentials)
+    await client._session.close()
 
 
 #####

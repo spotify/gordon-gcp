@@ -118,7 +118,3 @@ class TestGCEClient:
         expected_results = compute_rsp['items']['us-west1-z']['instances'] \
             + page2['items']['us-west1-z']['instances']
         assert expected_results == results
-        requests = list(m.requests.keys())
-        assert 2 == len(requests)
-        assert ('get', filter_url) == requests[0]
-        assert ('get', url_with_token) == requests[1]

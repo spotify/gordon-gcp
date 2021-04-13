@@ -23,21 +23,21 @@ gcp
 
 Any configuration key/value listed here may also be used in the specific plugin configuration. Values set in a plugin-specific config section will overwrite what's set in this general ``[gcp]`` section.
 
+.. option:: project="STR"
+
+    `Required`: Google Project ID which hosts the relevant GCP services (e.g. Cloud DNS, Pub/Sub, Compute Engine).
+
+    To learn more about GCP projects, please see `Google's docs on creating & managing projects <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_.
+
 .. option:: keyfile="/path/to/keyfile.json"
 
-    `Required`: Path to the Service Account JSON keyfile to use while authenticating against Google APIs.
+    `Optional`: Path to the Service Account JSON keyfile to use while authenticating against Google APIs. If not provided the default Service Account will be used instead.
 
     While one global key for all plugins is supported, it's advised to create a key per plugin with only the permissions it requires. To setup a service account, follow `Google's docs on creating & managing service account keys <https://cloud.google.com/iam/docs/creating-managing-service-account-keys>`_.
 
     .. attention::
 
         For the Pub/Sub plugin, ``keyfile`` is not required when running against the `Pub/Sub Emulator <https://cloud.google.com/pubsub/docs/emulator>`_ that Google provides.
-
-.. option:: project="STR"
-
-    `Required`: Google Project ID which hosts the relevant GCP services (e.g. Cloud DNS, Pub/Sub, Compute Engine).
-
-    To learn more about GCP projects, please see `Google's docs on creating & managing projects <https://cloud.google.com/resource-manager/docs/creating-managing-projects>`_.
 
 .. option:: scopes=["STR","STR"]
 
@@ -51,7 +51,7 @@ Any configuration key/value listed here may also be used in the specific plugin 
 
     `Optional`: Prefix associated with Google managed zone names, prepended with a '-' to the generated name.
     For example prefix "production" will produced a managed zone name of "production-example-com" for the
-    "example.com." DNS zone. 
+    "example.com." DNS zone.
 
     Note: This prefix must be the same as that used by the Gordon Service to work correctly.
 
