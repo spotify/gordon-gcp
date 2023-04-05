@@ -1,3 +1,7 @@
+**Gordon is no longer developed publicly.  This code will remain available, but will not change.**
+
+----
+
 =========================================================
 ``gordon-gcp``: GCP Plugins for Gordon and Gordon Janitor
 =========================================================
